@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from app.api import experiments as experiments_api
 from app.config import Settings
 from app.main import app
-from app.core.scene_imports import parse_scene_import
+from app.core.scene_imports import build_overpass_query, parse_scene_import
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -24,6 +24,15 @@ def _osm_payload() -> bytes:
     <tag k='building:levels' v='5'/>
   </way>
 </osm>"""
+
+
+def test_overpass_query_contains_building_bbox() -> None:
+    query = build_overpass_query(31.0, 121.0, 31.1, 121.1)
+    assert '[out:json]' in query
+    assert 'way["building"]' in query
+    assert 'way["building:part"]' in query
+    assert '(31.0000000,121.0000000,31.1000000,121.1000000)' in query
+    assert 'out geom' in query
 
 
 def test_osm_import_projects_footprint_and_height() -> None:

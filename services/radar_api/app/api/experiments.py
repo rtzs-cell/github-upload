@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from app.config import get_settings
-from app.core.scene_imports import store_scene_import
+from app.core.scene_imports import fetch_osm_scene_import, store_scene_import
 from app.core.two_building_scene import (
     create_experiment,
     default_two_building_config,
@@ -18,7 +18,7 @@ from app.core.two_building_scene import (
     store_experiment_model,
 )
 from app.core.history_management import delete_experiment
-from app.schemas import ExperimentCreateRequest, ExperimentListResponse, ExperimentResponse, ExperimentSummary, ExperimentUpdateRequest, NameUpdateRequest
+from app.schemas import ExperimentCreateRequest, ExperimentListResponse, ExperimentResponse, ExperimentSummary, ExperimentUpdateRequest, NameUpdateRequest, OsmFetchRequest
 
 
 router = APIRouter(prefix="/api/experiments", tags=["experiments"])
@@ -98,6 +98,24 @@ async def upload_scene_import(experiment_id: str, request: Request, filename: st
         raise HTTPException(status_code=413, detail="Scene file exceeds the 50 MB limit")
     try:
         return store_scene_import(settings.workbench_output_root, experiment_id, filename, data)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"Unknown experiment_id: {experiment_id}") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/{experiment_id}/scene-fetch/osm")
+def fetch_osm_scene(experiment_id: str, request: OsmFetchRequest) -> dict:
+    settings = get_settings()
+    try:
+        return fetch_osm_scene_import(
+            settings.workbench_output_root,
+            experiment_id,
+            request.latitude,
+            request.longitude,
+            request.radius_km,
+            settings.overpass_url,
+        )
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=f"Unknown experiment_id: {experiment_id}") from exc
     except ValueError as exc:

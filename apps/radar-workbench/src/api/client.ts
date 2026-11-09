@@ -85,6 +85,17 @@ export async function updateExperiment(experimentId: string, config: Record<stri
   })
 }
 
+export async function fetchExperimentOsm(
+  experimentId: string,
+  payload: { latitude: number; longitude: number; radius_km: number },
+): Promise<SceneImportResult> {
+  const path = '/api/experiments/' + encodeURIComponent(experimentId) + '/scene-fetch/osm'
+  return requestJson<SceneImportResult>(path, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export async function importExperimentScene(experimentId: string, file: File): Promise<SceneImportResult> {
   const path = '/api/experiments/' + encodeURIComponent(experimentId) + '/scene-imports?filename=' + encodeURIComponent(file.name)
   const response = await fetch(apiUrl(path), {

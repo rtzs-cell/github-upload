@@ -15,6 +15,7 @@ class Settings(BaseModel):
     sionna_python: Path | None = None
     sionna_python_no_user_site: bool = True
     sionna_runner_timeout_s: float | None = None
+    overpass_url: str = "https://overpass-api.de/api/interpreter"
 
 
 def _find_repo_root() -> Path:
@@ -59,6 +60,7 @@ def get_settings() -> Settings:
         web_cache_root=workbench_output_root / "web_cache",
         sionna_python=_sionna_python(),
         sionna_python_no_user_site=os.environ.get("RADAR_SIONNA_PYTHONNOUSERSITE", "1") != "0",
+        overpass_url=os.environ.get("RADAR_OVERPASS_URL", "https://overpass-api.de/api/interpreter"),
         sionna_runner_timeout_s=(
             float(os.environ["RADAR_SIONNA_RUNNER_TIMEOUT_S"])
             if os.environ.get("RADAR_SIONNA_RUNNER_TIMEOUT_S")

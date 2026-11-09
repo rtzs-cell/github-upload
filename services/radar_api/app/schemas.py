@@ -128,6 +128,12 @@ class ExperimentCreateRequest(BaseModel):
     config: dict[str, Any] = Field(default_factory=dict)
 
 
+class OsmFetchRequest(BaseModel):
+    latitude: float = Field(ge=-90.0, le=90.0)
+    longitude: float = Field(ge=-180.0, le=180.0)
+    radius_km: float = Field(default=1.0, gt=0.0, le=5.0)
+
+
 class NameUpdateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
 

@@ -2314,6 +2314,10 @@ select {
 .scene-import-help { margin: 0; color: #607077; font-size: 11px; line-height: 1.45; }
 .scene-import-summary { display: flex; flex-direction: column; gap: 3px; padding: 8px 9px; border-left: 3px solid #4c9886; background: #eef8f5; color: #315d55; font-size: 11px; line-height: 1.4; }
 .warning-text { color: #9a6b16; }
+.scene-online-import { display: flex; flex-direction: column; gap: 7px; padding: 9px; border: 1px solid #d8e0e3; border-radius: 6px; background: #f7fbfa; }
+.scene-online-import > strong { color: #315d55; font-size: 12px; }
+.scene-online-import .field { margin: 0; }
+.online-import-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
 .scene-editor { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .scene-editor-section,
 .building-editor { border: 1px solid #d8e0e3; border-radius: 6px; padding: 9px; background: #fbfcfc; min-width: 0; }

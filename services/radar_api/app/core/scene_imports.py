@@ -5,6 +5,9 @@ import math
 import re
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 from uuid import uuid4
 from xml.etree import ElementTree
 
@@ -271,6 +274,57 @@ def _parse_geojson(payload: dict[str, Any], source_key: str) -> dict[str, Any]:
                 continue
             polygons.append((polygon, tags, str(feature.get("id") or f"{index}_{part_index}")))
     return _finish_import(polygons, "geojson", source_key, warnings)
+
+
+def build_overpass_query(south: float, west: float, north: float, east: float) -> str:
+    bbox = f"{south:.7f},{west:.7f},{north:.7f},{east:.7f}"
+    return f'[out:json][timeout:30];(way["building"]({bbox});way["building:part"]({bbox}););out geom;'
+
+
+def fetch_osm_scene_import(
+    root: Path,
+    experiment_id: str,
+    latitude: float,
+    longitude: float,
+    radius_km: float,
+    endpoint: str,
+) -> dict[str, Any]:
+    if radius_km <= 0 or radius_km > 5:
+        raise ValueError("OSM fetch radius must be between 0 and 5 km")
+    if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+        raise ValueError("Invalid latitude or longitude")
+    latitude_delta = radius_km / 110.54
+    longitude_delta = radius_km / max(111.32 * math.cos(math.radians(latitude)), 1e-6)
+    south = max(-90.0, latitude - latitude_delta)
+    north = min(90.0, latitude + latitude_delta)
+    west = max(-180.0, longitude - longitude_delta)
+    east = min(180.0, longitude + longitude_delta)
+    query = build_overpass_query(south, west, north, east)
+    request = Request(
+        endpoint,
+        data=urlencode({"data": query}).encode("utf-8"),
+        headers={"User-Agent": "RadarSimulate/0.3 OSM scene import"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=45) as response:
+            data = response.read(50 * 1024 * 1024 + 1)
+    except HTTPError as exc:
+        raise ValueError(f"Overpass request failed with HTTP {exc.code}") from exc
+    except (URLError, TimeoutError) as exc:
+        raise ValueError(f"Overpass request failed: {exc}") from exc
+    if len(data) > 50 * 1024 * 1024:
+        raise ValueError("Overpass response exceeds the 50 MB limit")
+    result = store_scene_import(root, experiment_id, "overpass_osm.json", data)
+    result["original_filename"] = f"Overpass OSM {latitude:.5f},{longitude:.5f}"
+    result["fetch_request"] = {
+        "latitude": latitude,
+        "longitude": longitude,
+        "radius_km": radius_km,
+        "bbox": [south, west, north, east],
+        "endpoint": endpoint,
+    }
+    return result
 
 
 def parse_scene_import(filename: str, data: bytes) -> dict[str, Any]:

@@ -52,7 +52,7 @@ function vector(value: unknown, fallback: [number, number, number]): [number, nu
   return [Number(value[0] ?? fallback[0]), Number(value[1] ?? fallback[1]), Number(value[2] ?? fallback[2])]
 }
 
-export function SceneGeometryEditor({ config, baseline, materials, saving, selectedObjectId, canUndo, canRedo, onChange, onSelect, onUndo, onRedo, onReset, onSave, onImportModel, onImportScene }: {
+export function SceneGeometryEditor({ config, baseline, materials, saving, selectedObjectId, canUndo, canRedo, onChange, onSelect, onUndo, onRedo, onReset, onSave, onImportModel, onImportScene, onFetchOsm }: {
   config: Record<string, any>
   baseline: Record<string, any>
   materials: Record<string, MaterialPreset>
@@ -68,11 +68,16 @@ export function SceneGeometryEditor({ config, baseline, materials, saving, selec
   onSave: (config: Record<string, any>) => void
   onImportModel: (file: File) => Promise<ImportedModelAsset>
   onImportScene: (file: File) => Promise<SceneImportResult>
+  onFetchOsm: (payload: { latitude: number; longitude: number; radius_km: number }) => Promise<SceneImportResult>
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const sceneInputRef = useRef<HTMLInputElement>(null)
   const mapInputRef = useRef<HTMLInputElement>(null)
   const [importing, setImporting] = useState(false)
+  const [fetchingOsm, setFetchingOsm] = useState(false)
+  const [osmLatitude, setOsmLatitude] = useState('31.2304')
+  const [osmLongitude, setOsmLongitude] = useState('121.4737')
+  const [osmRadiusKm, setOsmRadiusKm] = useState('1')
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge')
   const [lastImport, setLastImport] = useState<SceneImportResult | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
@@ -192,6 +197,23 @@ export function SceneGeometryEditor({ config, baseline, materials, saving, selec
     }
   }
 
+  const fetchOsm = async () => {
+    setFetchingOsm(true)
+    setImportError(null)
+    try {
+      const result = await onFetchOsm({
+        latitude: Number(osmLatitude),
+        longitude: Number(osmLongitude),
+        radius_km: Number(osmRadiusKm),
+      })
+      applyImportedBuildings(result)
+    } catch (error) {
+      setImportError(error instanceof Error ? error.message : String(error))
+    } finally {
+      setFetchingOsm(false)
+    }
+  }
+
   const importScene = async (file: File) => {
     setImportError(null)
     try {
@@ -280,6 +302,16 @@ export function SceneGeometryEditor({ config, baseline, materials, saving, selec
         <option value="replace">替换当前建筑</option>
       </select></label>
       <p className="scene-import-help">OSM/GeoJSON 会按建筑面生成可编辑的仿真建筑，坐标原点取导入区域中心。</p>
+    </div>
+    <div className="scene-online-import">
+      <strong>在线获取 OSM 建筑</strong>
+      <p className="scene-import-help">通过 Overpass 获取中心点周围的建筑面，半径上限 5 km。</p>
+      <div className="online-import-grid">
+        <label className="field"><span>中心纬度</span><input type="number" step="0.00001" value={osmLatitude} onChange={(event) => setOsmLatitude(event.target.value)} disabled={saving || fetchingOsm} /></label>
+        <label className="field"><span>中心经度</span><input type="number" step="0.00001" value={osmLongitude} onChange={(event) => setOsmLongitude(event.target.value)} disabled={saving || fetchingOsm} /></label>
+        <label className="field"><span>半径 km</span><input type="number" min="0.1" max="5" step="0.1" value={osmRadiusKm} onChange={(event) => setOsmRadiusKm(event.target.value)} disabled={saving || fetchingOsm} /></label>
+      </div>
+      <button type="button" className="secondary-action full-width" disabled={saving || importing || fetchingOsm} onClick={() => void fetchOsm()}><Globe2 size={15} />{fetchingOsm ? '正在获取 OSM' : '在线获取并导入'}</button>
     </div>
     {importError && <div className="error-banner">{importError}</div>}
     {lastImport && <div className="scene-import-summary"><strong>{lastImport.original_filename} 已导入</strong><span>{lastImport.object_count} 个建筑 · {lastImport.source_type === 'custom' ? '自定义场景' : <>原点 {lastImport.origin.latitude.toFixed(5)}, {lastImport.origin.longitude.toFixed(5)}</>}</span>{lastImport.warnings.length > 0 && <span className="warning-text">{lastImport.warnings.length} 个对象被跳过</span>}</div>}
