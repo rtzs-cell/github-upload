@@ -382,12 +382,19 @@ export function App() {
   }
 
   const commitSceneEdit = (next: Record<string, any>) => {
+    const sceneSourceChanged = Boolean(
+      next.scene?.source?.type
+      && JSON.stringify(sceneEditConfig?.scene?.source ?? null) !== JSON.stringify(next.scene.source),
+    )
     if (sceneEditConfig && JSON.stringify(sceneEditConfig.scene) !== JSON.stringify(next.scene)) {
       setSceneUndoStack((items) => [...items, cloneSceneConfig(sceneEditConfig)].slice(-50))
       setSceneRedoStack([])
     }
     setSceneEditConfig(next)
     setObjects(experimentToSceneObjects(next))
+    if (sceneSourceChanged && Array.isArray(next.radar?.look_at_m)) {
+      setDraft((current) => current ? { ...current, look_at_m: next.radar.look_at_m } : current)
+    }
   }
 
   const undoSceneEdit = () => {
@@ -939,7 +946,7 @@ export function App() {
             objects={objects}
             paths={scenePaths}
             config={draft}
-            viewKey={selectedRunId ?? selectedExperimentId ?? draft.scene_id}
+            viewKey={selectedRunId ?? (selectedExperimentId ?? draft.scene_id) + ':' + (sceneEditConfig?.scene?.source?.source_path ?? sceneEditConfig?.scene?.kind ?? '')}
             selectedPathId={selectedPathId}
             onPathSelect={selectPath}
             selectedObjectId={selectedSceneObjectId}
