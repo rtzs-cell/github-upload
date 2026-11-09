@@ -1,0 +1,21 @@
+[project]
+name = "radar-api"
+version = "0.3.0"
+description = "FastAPI backend for radar-only Sionna RT sensing workbench"
+requires-python = ">=3.10"
+dependencies = [
+  "fastapi",
+  "uvicorn",
+  "pydantic",
+  "pandas",
+  "numpy",
+  "scipy",
+  "matplotlib",
+  "pillow",
+  "pyarrow",
+  "pyyaml"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

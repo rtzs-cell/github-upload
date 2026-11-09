@@ -1,0 +1,3 @@
+# Isolated ray-tracing runtime used through RADAR_SIONNA_PYTHON.
+sionna-rt==2.0.1
+PyYAML==6.0.3

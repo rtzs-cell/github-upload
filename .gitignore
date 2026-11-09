@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+env/
+
+# Node / frontend
+node_modules/
+dist/
+!apps/radar-workbench/dist/
+!apps/radar-workbench/dist/**
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+/package-lock.json
+
+# Local runtime state
+.env
+.env.*
+!.env.docker.example
+*.log
+tmp/
+temp/
+
+# Locally generated release artifacts
+deliverables/
+
+# Large/generated experiment outputs
+outputs/**
+!outputs/
+!outputs/radar_workbench/
+!outputs/radar_workbench/.gitkeep
+!outputs/radar_workbench/scenes/
+!outputs/radar_workbench/scenes/.gitkeep
+!outputs/radar_workbench/campaigns/
+!outputs/radar_workbench/campaigns/.gitkeep
+!outputs/radar_workbench/jobs/
+!outputs/radar_workbench/jobs/.gitkeep
+!outputs/radar_workbench/web_cache/
+!outputs/radar_workbench/web_cache/.gitkeep
+!outputs/radar_workbench/logs/
+!outputs/radar_workbench/logs/.gitkeep
+
+# Generated workbench caches should stay out of git
+outputs/radar_workbench/scenes/**
+outputs/radar_workbench/campaigns/**
+outputs/radar_workbench/jobs/**
+outputs/radar_workbench/web_cache/**
+outputs/radar_workbench/logs/**
+!outputs/radar_workbench/scenes/.gitkeep
+!outputs/radar_workbench/campaigns/.gitkeep
+!outputs/radar_workbench/jobs/.gitkeep
+!outputs/radar_workbench/web_cache/.gitkeep
+!outputs/radar_workbench/logs/.gitkeep
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/
+*.swp

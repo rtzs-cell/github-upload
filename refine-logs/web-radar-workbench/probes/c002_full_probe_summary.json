@@ -1,0 +1,130 @@
+{
+  "schema_version": "0.1.0",
+  "created_at_utc": "2026-07-01T08:11:51Z",
+  "workspace": "/home/DataDisk/plzheng/radar_simulate",
+  "campaign": {
+    "campaign_id": "c002_full_existing",
+    "root": "outputs/sionna_radar_campaigns/C002_full_radar_sensing",
+    "pose_metrics_csv": {
+      "exists": true,
+      "rows": 30,
+      "columns": 22,
+      "size_bytes": 9875,
+      "column_names": [
+        "boresight_az_deg",
+        "boresight_el_deg",
+        "boresight_id",
+        "campaign",
+        "dominant_range_m",
+        "energy_in_fov",
+        "fov_energy_fraction",
+        "fov_path_fraction",
+        "look_x_m",
+        "look_y_m",
+        "look_z_m",
+        "max_interaction_depth",
+        "pose_id",
+        "range_max_m",
+        "run_dir",
+        "run_id",
+        "samples_per_src",
+        "seed",
+        "valid_path_count",
+        "x_m",
+        "y_m",
+        "z_m"
+      ]
+    },
+    "runs_index_csv": {
+      "exists": true,
+      "rows": 30,
+      "columns": 13,
+      "size_bytes": 6857
+    }
+  },
+  "representative_run": {
+    "run_id": "MM_C002full_Pp0_p0_BposY_S501_N500k",
+    "run_dir": "outputs/sionna_radar_campaigns/C002_full_radar_sensing/runs/MM_C002full_Pp0_p0_BposY_S501_N500k",
+    "file_sizes": {
+      "cir_npz_mb": 325,
+      "paths_summary_npz_mb": 5.1,
+      "radar_observation_npz_mb": 2.8,
+      "metadata_json_kb": 19,
+      "metrics_json_kb": 2.9
+    },
+    "paths_summary_npz": {
+      "path_count": 175423,
+      "max_depth": 2,
+      "keys": {
+        "tau_s": {"shape": [1, 1, 175423], "dtype": "float32"},
+        "valid": {"shape": [1, 1, 175423], "dtype": "bool"},
+        "theta_r_rad": {"shape": [1, 1, 175423], "dtype": "float32"},
+        "phi_r_rad": {"shape": [1, 1, 175423], "dtype": "float32"},
+        "theta_t_rad": {"shape": [1, 1, 175423], "dtype": "float32"},
+        "phi_t_rad": {"shape": [1, 1, 175423], "dtype": "float32"},
+        "doppler_hz": {"shape": [1, 1, 175423], "dtype": "float32", "min": 0.0, "max": 0.0},
+        "interactions": {"shape": [2, 1, 1, 175423], "dtype": "uint32"},
+        "objects": {"shape": [2, 1, 1, 175423], "dtype": "uint32"},
+        "vertices": {"shape": [2, 1, 1, 175423, 3], "dtype": "float32"}
+      }
+    },
+    "radar_observation_npz": {
+      "fov_path_count": 18275,
+      "keys": {
+        "range_azimuth_power": {"shape": [1334, 180], "dtype": "float64"},
+        "range_elevation_power": {"shape": [1334, 90], "dtype": "float64"},
+        "range_edges_m": {"shape": [1335], "dtype": "float64"},
+        "azimuth_edges_deg": {"shape": [181], "dtype": "float64"},
+        "elevation_edges_deg": {"shape": [91], "dtype": "float64"},
+        "fov_path_mask": {"shape": [175423], "dtype": "bool"},
+        "ranges_m": {"shape": [175423], "dtype": "float32"},
+        "aoa_azimuth_deg": {"shape": [175423], "dtype": "float32"},
+        "aoa_elevation_deg": {"shape": [175423], "dtype": "float32"},
+        "path_energy": {"shape": [175423], "dtype": "float32"}
+      }
+    },
+    "web_cache_estimates": {
+      "top_paths_json_top_k": 500,
+      "top_paths_json_estimated_bytes": 111425,
+      "range_azimuth_float32_bytes": 960480,
+      "range_elevation_float32_bytes": 480240,
+      "top500_depth_counts": {
+        "1": 498,
+        "2": 2
+      }
+    }
+  },
+  "environment": {
+    "python_packages": {
+      "fastapi": "OK",
+      "uvicorn": "OK",
+      "pydantic": "OK",
+      "pandas": "OK",
+      "pyarrow": "OK",
+      "numpy": "OK",
+      "scipy": "OK",
+      "zarr": "MISSING",
+      "laspy": "MISSING",
+      "open3d": "MISSING"
+    },
+    "frontend": {
+      "node": "22.22.0",
+      "npm": "10.9.4"
+    },
+    "gpus": {
+      "allowed_ids": [0, 1, 2, 3],
+      "probe": [
+        {"id": 0, "model": "NVIDIA H100 80GB HBM3", "total_mb": 81559, "used_mb": 3, "utilization_percent": 0},
+        {"id": 1, "model": "NVIDIA H100 80GB HBM3", "total_mb": 81559, "used_mb": 3, "utilization_percent": 0},
+        {"id": 2, "model": "NVIDIA H100 80GB HBM3", "total_mb": 81559, "used_mb": 3, "utilization_percent": 0},
+        {"id": 3, "model": "NVIDIA H100 80GB HBM3", "total_mb": 81559, "used_mb": 3, "utilization_percent": 0}
+      ]
+    }
+  },
+  "go_no_go": {
+    "phase0_readonly_browser": "GO",
+    "phase1_web_cache": "GO",
+    "phase2_live_single_pose_simulation": "GO_AFTER_PHASE0_PHASE1_PASS",
+    "pointcloud_to_sionna_conversion": "NO_GO_FOR_MVP"
+  }
+}

@@ -1,0 +1,395 @@
+archive:
+  output_root: outputs/sionna_radar
+  experiment_plan: refine-logs/EXPERIMENT_PLAN.md
+  tracker: refine-logs/EXPERIMENT_TRACKER.md
+
+defaults:
+  frequency_hz: 28000000000.0
+  bandwidth_hz: 1000000000.0
+  tx_power_dbm: 30.0
+  tx_array:
+    num_rows: 1
+    num_cols: 1
+    vertical_spacing: 0.5
+    horizontal_spacing: 0.5
+    pattern: iso
+    polarization: V
+  rx_array:
+    num_rows: 16
+    num_cols: 16
+    vertical_spacing: 0.5
+    horizontal_spacing: 0.5
+    pattern: iso
+    polarization: V
+  path_solver:
+    max_depth: 1
+    max_num_paths_per_src: 1000000
+    samples_per_src: 100000
+    synthetic_array: true
+    los: false
+    specular_reflection: true
+    diffuse_reflection: false
+    refraction: false
+    diffraction: false
+    edge_diffraction: false
+    seed: 1
+  fov:
+    az_center_deg: 0.0
+    az_width_deg: 120.0
+    el_min_deg: 0.0
+    el_max_deg: 40.0
+  range_processing:
+    rmax_m: 200.0
+    range_bin_m: 0.15
+    angle_bin_deg: 2.0
+    min_valid_tau_s: 1.0e-10
+  scattering:
+    enabled: false
+    coefficient: 0.0
+    xpd_coefficient: 0.0
+    pattern: lambertian
+    alpha_r: 20
+    alpha_i: 20
+    lambda_: 0.3
+
+runs:
+  R001:
+    milestone: M0
+    purpose: Environment and API metadata capture.
+    scene: none
+    mode: metadata_only
+    priority: MUST
+
+  R002:
+    milestone: M0
+    purpose: Rx 16x16 array geometry and metadata capture.
+    scene: simple_reflector
+    mode: array_metadata
+    priority: MUST
+
+  R003:
+    milestone: M1
+    purpose: Single reflector small-baseline monostatic sanity check with LoS disabled.
+    scene: simple_reflector
+    mode: path_run
+    priority: MUST
+    expected:
+      dominant_range_m: 10.0
+      dominant_range_tolerance_m: 0.3
+    devices:
+      tx_position_m: [0.0, -0.05, 10.0]
+      rx_position_m: [0.0, 0.05, 10.0]
+      look_at_m: [0.0, 0.0, 0.0]
+    path_solver:
+      max_depth: 1
+      samples_per_src: 10000
+      los: false
+      specular_reflection: true
+      diffuse_reflection: false
+      seed: 3
+
+  R004:
+    milestone: M1
+    purpose: Strict colocated single reflector sanity check with LoS disabled.
+    scene: simple_reflector
+    mode: path_run
+    priority: MUST
+    expected:
+      dominant_range_m: 10.0
+      dominant_range_tolerance_m: 0.3
+    devices:
+      tx_position_m: [0.0, 0.0, 10.0]
+      rx_position_m: [0.0, 0.0, 10.0]
+      look_at_m: [0.0, 0.0, 0.0]
+    path_solver:
+      max_depth: 1
+      samples_per_src: 10000
+      los: false
+      specular_reflection: true
+      diffuse_reflection: false
+      seed: 4
+
+  R005:
+    milestone: M1
+    purpose: LoS-enabled control to expose direct/self leakage behavior.
+    scene: simple_reflector
+    mode: path_run
+    priority: MUST
+    devices:
+      tx_position_m: [0.0, -0.05, 10.0]
+      rx_position_m: [0.0, 0.05, 10.0]
+      look_at_m: [0.0, 0.0, 0.0]
+    path_solver:
+      max_depth: 1
+      samples_per_src: 10000
+      los: true
+      specular_reflection: true
+      diffuse_reflection: false
+      seed: 5
+
+  R006:
+    milestone: M2
+    purpose: Floor-wall depth-1 specular baseline.
+    scene: floor_wall
+    mode: path_run
+    priority: MUST
+    devices:
+      tx_position_m: [-1.5, -0.05, 1.5]
+      rx_position_m: [-1.5, 0.05, 1.5]
+      look_at_m: [0.0, 0.0, 1.5]
+    path_solver:
+      max_depth: 1
+      samples_per_src: 100000
+      los: false
+      specular_reflection: true
+      diffuse_reflection: false
+      seed: 6
+
+  R007:
+    milestone: M2
+    purpose: Floor-wall depth-2 specular interaction check.
+    scene: floor_wall
+    mode: path_run
+    priority: MUST
+    devices:
+      tx_position_m: [-1.5, -0.05, 1.5]
+      rx_position_m: [-1.5, 0.05, 1.5]
+      look_at_m: [0.0, 0.0, 1.5]
+    path_solver:
+      max_depth: 2
+      samples_per_src: 200000
+      los: false
+      specular_reflection: true
+      diffuse_reflection: false
+      seed: 7
+
+  R007B:
+    milestone: M2
+    purpose: Dedicated double-reflector depth-2 specular interaction check.
+    scene: double_reflector
+    mode: path_run
+    priority: MUST
+    devices:
+      tx_position_m: [0.0, -0.05, 20.0]
+      rx_position_m: [0.0, 0.05, 20.0]
+      look_at_m: [-10.0, 0.0, 0.0]
+    path_solver:
+      max_depth: 2
+      samples_per_src: 200000
+      los: false
+      specular_reflection: true
+      diffuse_reflection: false
+      seed: 707
+
+  R008:
+    milestone: M2
+    purpose: Floor-wall depth-2 with diffuse backscattering enabled.
+    scene: floor_wall
+    mode: path_run
+    priority: MUST
+    devices:
+      tx_position_m: [-1.5, -0.05, 1.5]
+      rx_position_m: [-1.5, 0.05, 1.5]
+      look_at_m: [0.0, 0.0, 1.5]
+    scattering:
+      enabled: true
+      coefficient: 0.5
+      pattern: backscattering
+      alpha_r: 20
+      alpha_i: 20
+      lambda_: 0.3
+    path_solver:
+      max_depth: 2
+      samples_per_src: 300000
+      los: false
+      specular_reflection: true
+      diffuse_reflection: true
+      seed: 8
+
+  R009:
+    milestone: M3
+    purpose: Street canyon pilot without diffuse scattering.
+    scene: simple_street_canyon
+    mode: path_run
+    priority: MUST
+    devices:
+      tx_position_m: [0.0, -1.0, 10.0]
+      rx_position_m: [0.0, -0.9, 10.0]
+      look_at_m: [0.0, 25.0, 10.0]
+    path_solver:
+      max_depth: 2
+      samples_per_src: 200000
+      los: false
+      specular_reflection: true
+      diffuse_reflection: false
+      seed: 9
+
+  R010:
+    milestone: M3
+    purpose: Street canyon pilot with diffuse backscattering enabled.
+    scene: simple_street_canyon
+    mode: path_run
+    priority: MUST
+    devices:
+      tx_position_m: [0.0, -1.0, 10.0]
+      rx_position_m: [0.0, -0.9, 10.0]
+      look_at_m: [0.0, 25.0, 10.0]
+    scattering:
+      enabled: true
+      coefficient: 0.5
+      pattern: backscattering
+      alpha_r: 20
+      alpha_i: 20
+      lambda_: 0.3
+    path_solver:
+      max_depth: 2
+      samples_per_src: 500000
+      los: false
+      specular_reflection: true
+      diffuse_reflection: true
+      seed: 10
+
+  R011:
+    milestone: M4
+    purpose: Street canyon final backscatter seed 1.
+    scene: simple_street_canyon
+    mode: path_run
+    priority: MUST
+    devices:
+      tx_position_m: [0.0, -1.0, 10.0]
+      rx_position_m: [0.0, -0.9, 10.0]
+      look_at_m: [0.0, 25.0, 10.0]
+    scattering:
+      enabled: true
+      coefficient: 0.5
+      pattern: backscattering
+      alpha_r: 20
+      alpha_i: 20
+      lambda_: 0.3
+    path_solver:
+      max_depth: 2
+      samples_per_src: 2000000
+      los: false
+      specular_reflection: true
+      diffuse_reflection: true
+      seed: 11
+
+  R014:
+    milestone: M4
+    purpose: Street canyon depth-1 backscatter comparison.
+    scene: simple_street_canyon
+    mode: path_run
+    priority: MUST
+    devices:
+      tx_position_m: [0.0, -1.0, 10.0]
+      rx_position_m: [0.0, -0.9, 10.0]
+      look_at_m: [0.0, 25.0, 10.0]
+    scattering:
+      enabled: true
+      coefficient: 0.5
+      pattern: backscattering
+      alpha_r: 20
+      alpha_i: 20
+      lambda_: 0.3
+    path_solver:
+      max_depth: 1
+      samples_per_src: 1000000
+      los: false
+      specular_reflection: true
+      diffuse_reflection: true
+      seed: 14
+
+  R016:
+    milestone: M5
+    purpose: Street canyon scattering coefficient zero ablation.
+    scene: simple_street_canyon
+    mode: path_run
+    priority: MUST
+    devices:
+      tx_position_m: [0.0, -1.0, 10.0]
+      rx_position_m: [0.0, -0.9, 10.0]
+      look_at_m: [0.0, 25.0, 10.0]
+    scattering:
+      enabled: true
+      coefficient: 0.0
+      pattern: backscattering
+      alpha_r: 20
+      alpha_i: 20
+      lambda_: 0.3
+    path_solver:
+      max_depth: 2
+      samples_per_src: 500000
+      los: false
+      specular_reflection: true
+      diffuse_reflection: true
+      seed: 16
+
+  R018:
+    milestone: M5
+    purpose: Street canyon scattering coefficient 0.5 ablation.
+    scene: simple_street_canyon
+    mode: path_run
+    priority: MUST
+    devices:
+      tx_position_m: [0.0, -1.0, 10.0]
+      rx_position_m: [0.0, -0.9, 10.0]
+      look_at_m: [0.0, 25.0, 10.0]
+    scattering:
+      enabled: true
+      coefficient: 0.5
+      pattern: backscattering
+      alpha_r: 20
+      alpha_i: 20
+      lambda_: 0.3
+    path_solver:
+      max_depth: 2
+      samples_per_src: 500000
+      los: false
+      specular_reflection: true
+      diffuse_reflection: true
+      seed: 18
+
+  R020:
+    milestone: M5
+    purpose: Street canyon Lambertian diffuse pattern control.
+    scene: simple_street_canyon
+    mode: path_run
+    priority: MUST
+    devices:
+      tx_position_m: [0.0, -1.0, 10.0]
+      rx_position_m: [0.0, -0.9, 10.0]
+      look_at_m: [0.0, 25.0, 10.0]
+    scattering:
+      enabled: true
+      coefficient: 0.5
+      pattern: lambertian
+    path_solver:
+      max_depth: 2
+      samples_per_src: 500000
+      los: false
+      specular_reflection: true
+      diffuse_reflection: true
+      seed: 20
+
+  R021:
+    milestone: M5
+    purpose: Street canyon directive diffuse pattern control.
+    scene: simple_street_canyon
+    mode: path_run
+    priority: MUST
+    devices:
+      tx_position_m: [0.0, -1.0, 10.0]
+      rx_position_m: [0.0, -0.9, 10.0]
+      look_at_m: [0.0, 25.0, 10.0]
+    scattering:
+      enabled: true
+      coefficient: 0.5
+      pattern: directive
+      alpha_r: 20
+    path_solver:
+      max_depth: 2
+      samples_per_src: 500000
+      los: false
+      specular_reflection: true
+      diffuse_reflection: true
+      seed: 21

@@ -1,0 +1,37 @@
+services:
+  radar-workbench:
+    image: ${RADAR_IMAGE:-radar-workbench:2.0.1}
+    build:
+      context: .
+      dockerfile: Containerfile
+      args:
+        APP_VERSION: ${RADAR_VERSION:-2.0.1}
+        PYTHON_IMAGE: ${RADAR_PYTHON_IMAGE:-public.ecr.aws/docker/library/python:3.10-slim-bookworm}
+    restart: unless-stopped
+    user: "${RADAR_UID:-1000}:${RADAR_GID:-1000}"
+    ports:
+      - "${RADAR_BIND_ADDRESS:-127.0.0.1}:${RADAR_PORT:-8000}:8000"
+    environment:
+      RADAR_API_HOST: 0.0.0.0
+      RADAR_API_PORT: 8000
+      RADAR_UI_MODE: embedded
+      RADAR_OUTPUT_ROOT: /data
+      RADAR_SIONNA_PYTHON: /usr/local/bin/python
+      RADAR_SIONNA_PYTHONNOUSERSITE: 1
+      RADAR_GPU_IDS: ${RADAR_GPU_IDS:-0}
+    volumes:
+      - ${RADAR_DATA_DIR:-./radar-data}:/data
+    shm_size: 1gb
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
