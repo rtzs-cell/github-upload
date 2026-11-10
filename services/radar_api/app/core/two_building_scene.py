@@ -309,6 +309,8 @@ def normalize_footprint_points(footprint_m: Any, size_m: list[float]) -> list[tu
             points = filtered
     if len(points) < 3:
         raise ValueError("Extruded footprint is collinear")
+    if _polygon_area(points) < 0:
+        points.reverse()
     min_x = min(point[0] for point in points)
     max_x = max(point[0] for point in points)
     min_y = min(point[1] for point in points)
