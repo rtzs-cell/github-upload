@@ -305,8 +305,7 @@ def normalize_footprint_points(footprint_m: Any, size_m: list[float]) -> list[tu
                 changed = True
                 continue
             filtered.append(point)
-        if len(filtered) >= 3:
-            points = filtered
+        points = filtered
     if len(points) < 3:
         raise ValueError("Extruded footprint is collinear")
     if _polygon_area(points) < 0:

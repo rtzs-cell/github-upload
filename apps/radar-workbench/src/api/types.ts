@@ -102,6 +102,8 @@ export type SceneObject = {
   }
 }
 
+export type OsmBounds = { south: number; west: number; north: number; east: number }
+
 export type SceneImportResult = {
   source_type: 'osm' | 'geojson' | 'custom'
   source_key: string
@@ -112,6 +114,7 @@ export type SceneImportResult = {
   warnings: string[]
   buildings: Array<Record<string, any>>
   scene_patch?: Record<string, any>
+  fetch_request?: { bbox: [number, number, number, number] }
 }
 
 export type ImportedModelAsset = {

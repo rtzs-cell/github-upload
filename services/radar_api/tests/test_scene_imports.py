@@ -1,10 +1,14 @@
-from pathlib import Path
+from io import BytesIO
 import json
+from pathlib import Path
+from urllib.parse import parse_qs
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app.api import experiments as experiments_api
 from app.config import Settings
+from app.core import scene_imports
 from app.main import app
 from app.core.scene_imports import build_overpass_query, parse_scene_import
 from app.core.two_building_scene import write_extruded_polygon_ply
@@ -56,6 +60,56 @@ def test_osm_bbox_endpoint_rejects_ranges_larger_than_five_km(tmp_path: Path, mo
     assert "5 km" in response.text
 
 
+@pytest.mark.parametrize(
+    ("mode", "route", "selection"),
+    [
+        ("bbox", "osm-bbox", {"south": 31.0, "west": 121.0, "north": 31.003, "east": 121.004}),
+        ("radius", "osm", {"latitude": 31.0, "longitude": 121.0, "radius_km": 5}),
+    ],
+)
+def test_online_osm_uses_selected_area_and_preserves_footprint(tmp_path: Path, monkeypatch, mode, route, selection) -> None:
+    settings = Settings(
+        repo_root=REPO_ROOT,
+        existing_campaign_root=REPO_ROOT / "outputs" / "sionna_radar_campaigns" / "C002_full_radar_sensing",
+        workbench_output_root=tmp_path / "workbench",
+        web_cache_root=tmp_path / "cache",
+    )
+    monkeypatch.setattr(experiments_api, "get_settings", lambda: settings)
+    geometry = [
+        {"lat": lat, "lon": lon}
+        for lat, lon in [(31.0, 121.0), (31.0, 121.002), (31.001, 121.001), (31.002, 121.0), (31.0, 121.0)]
+    ]
+    payload = json.dumps({
+        "elements": [{"type": "way", "id": 42, "tags": {"building": "yes"}, "geometry": geometry}],
+    }).encode()
+    queries = []
+
+    def overpass_response(request, timeout):
+        queries.append(parse_qs(request.data.decode())["data"][0])
+        return BytesIO(payload)
+
+    monkeypatch.setattr(scene_imports, "urlopen", overpass_response)
+    client = TestClient(app)
+    created = client.post("/api/experiments", json={"config": {"scene_preset": "empty", "name": "map selection"}})
+    assert created.status_code == 200, created.text
+    manifest = created.json()["manifest"]
+    response = client.post(f"/api/experiments/{manifest['experiment_id']}/scene-fetch/{route}", json=selection)
+    assert response.status_code == 200, response.text
+    imported = response.json()
+    bounds = imported["fetch_request"]["bbox"]
+    assert imported["fetch_request"]["mode"] == mode
+    if mode == "bbox":
+        assert bounds == [selection[key] for key in ("south", "west", "north", "east")]
+    else:
+        assert (bounds[2] - bounds[0]) * 110.54 == pytest.approx(10)
+    assert queries == [build_overpass_query(*bounds)]
+    assert imported["object_count"] == 1
+    building = imported["buildings"][0]
+    assert building["geometry_kind"] == "extruded_polygon"
+    assert len(building["footprint_m"]) == 4
+    assert (Path(manifest["root"]) / imported["source_path"]).read_bytes() == payload
+
+
 def test_osm_import_projects_footprint_and_height() -> None:
     result = parse_scene_import("map.osm", _osm_payload())
     assert result["source_type"] == "osm"
@@ -102,6 +156,11 @@ def test_geojson_import_reads_building_properties() -> None:
     assert result["source_type"] == "geojson"
     assert result["buildings"][0]["name"] == "Geo Tower"
     assert result["buildings"][0]["size_m"][2] == 9.0
+
+
+def test_extruded_polygon_rejects_collinear_footprint(tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="collinear"):
+        write_extruded_polygon_ply(tmp_path / "invalid.ply", [(0, 0), (1, 1), (2, 2)], [0, 0, 0], [2, 2, 3])
 
 
 def test_osm_import_endpoint_supports_hybrid_scene(tmp_path: Path, monkeypatch) -> None:

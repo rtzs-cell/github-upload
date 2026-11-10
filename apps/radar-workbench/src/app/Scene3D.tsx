@@ -3,6 +3,7 @@ import { Canvas, useLoader, useThree } from '@react-three/fiber'
 import type { ThreeEvent } from '@react-three/fiber'
 import { Eye, EyeOff, Maximize, Move3D, Rotate3D, Route, ScanLine, Scaling, Sparkles, X } from 'lucide-react'
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { ComponentRef } from 'react'
 import * as THREE from 'three'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js'
@@ -24,18 +25,40 @@ function vec3(values: [number, number, number]) {
 
 type ViewBounds = {
   target: [number, number, number]
-  camera: [number, number, number]
+  direction: [number, number, number]
+  halfExtent: [number, number, number]
   gridSize: number
 }
 
-function CameraRig({ bounds, viewKey }: { bounds: ViewBounds; viewKey: string }) {
-  const { camera } = useThree()
+function CameraRig({ bounds, viewKey, enabled }: { bounds: ViewBounds; viewKey: string; enabled: boolean }) {
+  const { camera, size } = useThree()
+  const controls = useRef<ComponentRef<typeof OrbitControls>>(null)
   useEffect(() => {
-    camera.position.set(bounds.camera[0], bounds.camera[1], bounds.camera[2])
-    camera.lookAt(bounds.target[0], bounds.target[1], bounds.target[2])
+    if (!(camera instanceof THREE.PerspectiveCamera) || !controls.current || !size.height) return
+    const direction = vec3(bounds.direction).normalize()
+    const right = new THREE.Vector3().crossVectors(camera.up, direction).normalize()
+    const up = new THREE.Vector3().crossVectors(direction, right)
+    const vertical = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2)
+    const horizontal = vertical * size.width / size.height
+    const [x, y, z] = bounds.halfExtent
+    let distance = 0
+    for (const dx of [-x, x]) {
+      for (const dy of [-y, y]) {
+        for (const dz of [-z, z]) {
+          const corner = new THREE.Vector3(dx, dy, dz)
+          const fit = Math.max(Math.abs(corner.dot(right)) / horizontal, Math.abs(corner.dot(up)) / vertical)
+          distance = Math.max(distance, corner.dot(direction) + 1.18 * fit)
+        }
+      }
+    }
+    const target = vec3(bounds.target)
+    camera.position.copy(target).addScaledVector(direction, distance)
+    camera.far = Math.max(2000, distance * 5)
     camera.updateProjectionMatrix()
-  }, [bounds, camera, viewKey])
-  return null
+    controls.current.target.copy(target)
+    controls.current.update()
+  }, [bounds, camera, size.width, size.height, viewKey])
+  return <OrbitControls ref={controls} makeDefault enabled={enabled} />
 }
 
 function computeViewBounds(objects: SceneObject[], config: RadarDraftConfig): ViewBounds {
@@ -61,10 +84,10 @@ function computeViewBounds(objects: SceneObject[], config: RadarDraftConfig): Vi
     (min[2] + max[2]) / 2,
   ]
   const span = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2], 80)
-  const distance = span * 1.15
   return {
     target,
-    camera: [target[0] - distance * 0.52, target[1] + distance * 0.55, target[2] + distance * 0.62],
+    direction: [-0.52, 0.7, 0.62],
+    halfExtent: [Math.max(40, (max[0] - min[0]) / 2), (max[1] - min[1]) / 2, Math.max(40, (max[2] - min[2]) / 2)],
     gridSize: Math.max(220, span * 1.6),
   }
 }
@@ -86,10 +109,10 @@ function computePathViewBounds(path: TopPath, fallback: ViewBounds): ViewBounds 
     (min[2] + max[2]) / 2,
   ]
   const span = Math.max(max[0] - min[0], max[1] - min[1], max[2] - min[2], 18)
-  const distance = span * 1.25
   return {
     target,
-    camera: [target[0] - distance * 0.46, target[1] + distance * 0.62, target[2] + distance * 0.7],
+    direction: [-0.46, 0.62, 0.7],
+    halfExtent: [Math.max(9, (max[0] - min[0]) / 2), (max[1] - min[1]) / 2, Math.max(9, (max[2] - min[2]) / 2)],
     gridSize: Math.max(80, span * 2),
   }
 }
@@ -171,7 +194,9 @@ function ExtrudedFootprint({ object, selected }: { object: SceneObject; selected
     extruded.computeVertexNormals()
     return extruded
   }, [footprint, simSize[2]])
-  const edges = useMemo(() => geometry ? new THREE.EdgesGeometry(geometry, 15) : null, [geometry])
+  const edges = useMemo(() => selected && geometry ? new THREE.EdgesGeometry(geometry, 15) : null, [geometry, selected])
+  useEffect(() => () => geometry?.dispose(), [geometry])
+  useEffect(() => () => edges?.dispose(), [edges])
   if (!geometry) return <mesh><boxGeometry args={[simSize[0], simSize[2], simSize[1]]} /><meshStandardMaterial color={materialColors[object.material] ?? '#b8c0c2'} /></mesh>
   return <>
     <mesh geometry={geometry}>
@@ -179,8 +204,6 @@ function ExtrudedFootprint({ object, selected }: { object: SceneObject; selected
         color={materialColors[object.material] ?? '#b8c0c2'}
         emissive={selected ? '#176b5a' : '#000000'}
         emissiveIntensity={selected ? 0.32 : 0}
-        transparent
-        opacity={selected ? 0.86 : 0.68}
         side={THREE.DoubleSide}
       />
     </mesh>
@@ -624,7 +647,7 @@ export function Scene3D({
   return (
     <div className={`scene3d-shell ${draggingRadar ? 'dragging-radar' : ''}`}>
       <Canvas camera={{ position: [105, 78, 120], fov: 48 }} gl={{ antialias: true }} onPointerMissed={() => onObjectSelect?.(null)}>
-        <CameraRig bounds={viewBounds} viewKey={`${boundsKey}-${focusSelectedPath ? selectedPathId : 'scene'}`} />
+        <CameraRig bounds={viewBounds} viewKey={`${boundsKey}-${focusSelectedPath ? selectedPathId : 'scene'}`} enabled={!draggingRadar && !transformingObject} />
         <color attach="background" args={['#eef3f2']} />
         <ambientLight intensity={0.8} />
         <directionalLight position={[30, 80, 40]} intensity={1.1} />
@@ -658,7 +681,6 @@ export function Scene3D({
             onSelect={onPathSelect}
           />
         )}
-        <OrbitControls makeDefault target={viewBounds.target} enabled={!draggingRadar && !transformingObject} />
       </Canvas>
       <div className="scene-toolbar" aria-label="三维场景图层">
         <button type="button" className={showPaths ? 'active' : ''} onClick={() => setShowPaths((value) => !value)} title="显示或隐藏传播路径">

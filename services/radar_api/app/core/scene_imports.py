@@ -301,7 +301,6 @@ def _fetch_osm_scene_from_bbox(
     endpoint: str,
     request_metadata: dict[str, Any],
 ) -> dict[str, Any]:
-    _validate_osm_bbox(south, west, north, east)
     query = build_overpass_query(south, west, north, east)
     request = Request(
         endpoint,
@@ -319,7 +318,10 @@ def _fetch_osm_scene_from_bbox(
     if len(data) > 50 * 1024 * 1024:
         raise ValueError("Overpass response exceeds the 50 MB limit")
     result = store_scene_import(root, experiment_id, "overpass_osm.json", data)
-    result["original_filename"] = "Overpass OSM drawn area"
+    if request_metadata["mode"] == "radius":
+        result["original_filename"] = f"Overpass OSM {request_metadata['latitude']:.5f},{request_metadata['longitude']:.5f}"
+    else:
+        result["original_filename"] = "OpenStreetMap 框选街区"
     result["fetch_request"] = {
         "bbox": [south, west, north, east],
         "endpoint": endpoint,
@@ -367,6 +369,7 @@ def fetch_osm_scene_bbox_import(
     east: float,
     endpoint: str,
 ) -> dict[str, Any]:
+    _validate_osm_bbox(south, west, north, east)
     return _fetch_osm_scene_from_bbox(
         root,
         experiment_id,

@@ -8,6 +8,7 @@ import type {
   JobStatusResponse,
   InteractionsResponse,
   ImportedModelAsset,
+  OsmBounds,
   PathExportRequest,
   PathExportResponse,
   PathStatisticsResponse,
@@ -98,7 +99,7 @@ export async function fetchExperimentOsm(
 
 export async function fetchExperimentOsmBbox(
   experimentId: string,
-  payload: { south: number; west: number; north: number; east: number },
+  payload: OsmBounds,
 ): Promise<SceneImportResult> {
   const path = '/api/experiments/' + encodeURIComponent(experimentId) + '/scene-fetch/osm-bbox'
   return requestJson<SceneImportResult>(path, {

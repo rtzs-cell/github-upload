@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   Activity,
   BarChart3,
@@ -275,7 +275,9 @@ function SpectrumCanvas({ spectrum, title }: { spectrum: SpectrumState | null; t
 
 export function App() {
   const [experiments, setExperiments] = useState<ExperimentSummary[]>([])
-  const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(null)
+  const [linkedExperimentId] = useState(() => new URLSearchParams(window.location.search).get('experiment'))
+  const [selectedExperimentId, setSelectedExperimentId] = useState<string | null>(linkedExperimentId)
+  const activeExperimentId = useRef(selectedExperimentId)
   const [selectedExperiment, setSelectedExperiment] = useState<ExperimentResponse | null>(null)
   const [campaigns, setCampaigns] = useState<CampaignSummary[]>([])
   const [selectedCampaignId, setSelectedCampaignId] = useState('workbench_local')
@@ -307,9 +309,9 @@ export function App() {
   const [notice, setNotice] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [runtime, setRuntime] = useState<SionnaRuntime | null>(null)
-  const [sourceTab, setSourceTab] = useState<'experiments' | 'runs' | 'knowledge'>('runs')
+  const [sourceTab, setSourceTab] = useState<'experiments' | 'runs' | 'knowledge'>(linkedExperimentId ? 'experiments' : 'runs')
   const [knowledgeTopic, setKnowledgeTopic] = useState<KnowledgeTopic>('start')
-  const [inspectorTab, setInspectorTab] = useState<'parameters' | 'scene' | 'paths'>('parameters')
+  const [inspectorTab, setInspectorTab] = useState<'parameters' | 'scene' | 'paths'>(linkedExperimentId ? 'scene' : 'parameters')
   const [leftPanelOpen, setLeftPanelOpen] = useState(true)
   const [rightPanelOpen, setRightPanelOpen] = useState(true)
   const [analysisTab, setAnalysisTab] = useState<'overview' | 'radar' | 'mpc' | 'beamforming' | 'spectra'>('overview')
@@ -328,6 +330,8 @@ export function App() {
   const [selectedSceneObjectId, setSelectedSceneObjectId] = useState<string | null>(null)
   const [sceneUndoStack, setSceneUndoStack] = useState<Record<string, any>[]>([])
   const [sceneRedoStack, setSceneRedoStack] = useState<Record<string, any>[]>([])
+
+  useLayoutEffect(() => { activeExperimentId.current = selectedExperimentId }, [selectedExperimentId])
 
   useEffect(() => {
     if (!notice) return undefined
@@ -495,7 +499,9 @@ export function App() {
       .then((items) => {
         if (cancelled) return
         setRuns(items)
-        setSelectedRunId((current) => items.some((item) => item.run_id === current) ? current : items[0]?.run_id ?? null)
+        if (!activeExperimentId.current) {
+          setSelectedRunId((current) => items.some((item) => item.run_id === current) ? current : items[0]?.run_id ?? null)
+        }
       })
       .catch((err) => {
         if (!cancelled) setError(err.message)
@@ -615,9 +621,11 @@ export function App() {
 
   useEffect(() => {
     if (!selectedExperimentId) return
+    let cancelled = false
     setLoading(true)
     fetchExperiment(selectedExperimentId)
       .then((response) => {
+        if (cancelled) return
         const nextDraft = experimentToDraftConfig(response.config)
         setSelectedExperiment(response)
         setSelectedRunId(null)
@@ -642,8 +650,13 @@ export function App() {
         setPathExportRoot(null)
         setError(null)
       })
-      .catch((err) => setError(err instanceof Error ? err.message : String(err)))
-      .finally(() => setLoading(false))
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : String(err))
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
   }, [selectedExperimentId])
 
   useEffect(() => {
@@ -716,9 +729,11 @@ export function App() {
       ? `结果 · ${sourcedRunLabel(selectedRun, experimentNames)}`
       : '未选择工作项'
 
+  const editingScene = inspectorTab === 'scene' && Boolean(selectedExperiment && sceneEditConfig)
   const shellClass = [
     'app-shell',
     sourceTab === 'knowledge' ? 'knowledge-mode' : '',
+    editingScene ? 'geometry-workspace' : '',
     leftPanelOpen ? '' : 'left-collapsed',
     rightPanelOpen ? '' : 'right-collapsed',
   ].filter(Boolean).join(' ')
@@ -977,6 +992,8 @@ export function App() {
           />
           <div className="scene-height-resizer" onPointerDown={beginResize('scene', sceneHeight)} title="拖动调整三维场景高度" />
         </div>)}
+        {editingScene && <div className="scene-caption">拖动旋转，滚轮缩放。点击建筑可查看和编辑尺寸。</div>}
+        {!editingScene && <>
         <div className="scene-caption">
           {selectedPath ? `当前路径 #${selectedPath.path_id} / 已载入 ${paths.length.toLocaleString()}` : `未选路径 / 已载入 ${paths.length.toLocaleString()}`}
         </div>
@@ -1098,6 +1115,7 @@ export function App() {
             <div className="result-tab-panel"><section className="figure-grid"><SpectrumCanvas spectrum={rangeAzimuth} title="距离-方位角谱" /><SpectrumCanvas spectrum={rangeElevation} title="距离-俯仰角谱" /></section></div>
           )}
         </section>
+        </>}
         </>}
       </main>
 
@@ -1319,6 +1337,7 @@ export function App() {
         )}
         {inspectorTab === 'scene' && selectedExperiment && sceneEditConfig && (
           <SceneGeometryEditor
+            key={selectedExperiment.manifest.experiment_id}
             config={sceneEditConfig}
             baseline={selectedExperiment.config}
             materials={scenePresets.materials}
@@ -1335,10 +1354,12 @@ export function App() {
               commitSceneEdit(next)
               setSelectedSceneObjectId(null)
             }}
-            onSave={(next) => {
+            onSave={async (next) => {
+              const experimentId = selectedExperiment.manifest.experiment_id
               setSavingScene(true)
-              updateExperiment(selectedExperiment.manifest.experiment_id, next)
-                .then((response) => {
+              try {
+                const response = await updateExperiment(experimentId, next)
+                if (activeExperimentId.current === experimentId) {
                   const nextDraft = experimentToDraftConfig(response.config)
                   setSelectedExperiment(response)
                   setSceneEditConfig(cloneSceneConfig(response.config))
@@ -1348,11 +1369,12 @@ export function App() {
                   setDraft(nextDraft)
                   setBaseline(nextDraft)
                   clearDraftHistory()
-                  setNotice('场景已保存为新版本，已有仿真结果保持不变。')
-                  return loadExperiments()
-                })
-                .catch((err) => setError(err instanceof Error ? err.message : String(err)))
-                .finally(() => setSavingScene(false))
+                  setNotice('场景已保存。')
+                }
+                await loadExperiments()
+              } finally {
+                setSavingScene(false)
+              }
             }}
             onImportModel={(file) => uploadExperimentModel(selectedExperiment.manifest.experiment_id, file)}
             onImportScene={(file) => importExperimentScene(selectedExperiment.manifest.experiment_id, file)}
