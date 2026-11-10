@@ -1,5 +1,6 @@
 import { Copy, Download, FileJson, Globe2, Plus, Redo2, RotateCcw, Save, Trash2, Undo2, Upload } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import type { PointerEvent as ReactPointerEvent } from 'react'
 import * as THREE from 'three'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js'
@@ -53,7 +54,7 @@ function vector(value: unknown, fallback: [number, number, number]): [number, nu
   return [Number(value[0] ?? fallback[0]), Number(value[1] ?? fallback[1]), Number(value[2] ?? fallback[2])]
 }
 
-export function SceneGeometryEditor({ config, baseline, materials, saving, selectedObjectId, canUndo, canRedo, onChange, onSelect, onUndo, onRedo, onReset, onSave, onImportModel, onImportScene, onFetchOsm }: {
+export function SceneGeometryEditor({ config, baseline, materials, saving, selectedObjectId, canUndo, canRedo, onChange, onSelect, onUndo, onRedo, onReset, onSave, onImportModel, onImportScene, onFetchOsm, onFetchOsmBbox }: {
   config: Record<string, any>
   baseline: Record<string, any>
   materials: Record<string, MaterialPreset>
@@ -70,6 +71,7 @@ export function SceneGeometryEditor({ config, baseline, materials, saving, selec
   onImportModel: (file: File) => Promise<ImportedModelAsset>
   onImportScene: (file: File) => Promise<SceneImportResult>
   onFetchOsm: (payload: { latitude: number; longitude: number; radius_km: number }) => Promise<SceneImportResult>
+  onFetchOsmBbox: (payload: { south: number; west: number; north: number; east: number }) => Promise<SceneImportResult>
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const sceneInputRef = useRef<HTMLInputElement>(null)
@@ -79,6 +81,11 @@ export function SceneGeometryEditor({ config, baseline, materials, saving, selec
   const [osmLatitude, setOsmLatitude] = useState('31.2304')
   const [osmLongitude, setOsmLongitude] = useState('121.4737')
   const [osmRadiusKm, setOsmRadiusKm] = useState('1')
+  const [osmFetchMode, setOsmFetchMode] = useState<'radius' | 'draw'>('radius')
+  const [drawnBbox, setDrawnBbox] = useState<{ south: number; west: number; north: number; east: number } | null>(null)
+  const [dragStart, setDragStart] = useState<[number, number] | null>(null)
+  const [dragCurrent, setDragCurrent] = useState<[number, number] | null>(null)
+  const areaPickerRef = useRef<SVGSVGElement>(null)
   const [importMode, setImportMode] = useState<'merge' | 'replace'>('merge')
   const [lastImport, setLastImport] = useState<SceneImportResult | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
@@ -199,15 +206,80 @@ export function SceneGeometryEditor({ config, baseline, materials, saving, selec
     }
   }
 
+  const areaCenterLat = Number.isFinite(Number(osmLatitude)) ? Number(osmLatitude) : 31.2304
+  const areaCenterLon = Number.isFinite(Number(osmLongitude)) ? Number(osmLongitude) : 121.4737
+  const areaHalfSpanKm = 2.5
+  const areaLatitudeSpan = (areaHalfSpanKm * 2) / 110.54
+  const areaLongitudeSpan = (areaHalfSpanKm * 2) / Math.max(111.32 * Math.cos(areaCenterLat * Math.PI / 180), 1e-6)
+  const areaPointFromEvent = (event: ReactPointerEvent<SVGSVGElement>): [number, number] => {
+    const rect = areaPickerRef.current?.getBoundingClientRect()
+    if (!rect) return [160, 90]
+    return [
+      Math.max(0, Math.min(320, ((event.clientX - rect.left) / rect.width) * 320)),
+      Math.max(0, Math.min(180, ((event.clientY - rect.top) / rect.height) * 180)),
+    ]
+  }
+  const coordinatesFromPoint = ([x, y]: [number, number]) => ({
+    latitude: areaCenterLat + (0.5 - y / 180) * areaLatitudeSpan,
+    longitude: areaCenterLon + (x / 320 - 0.5) * areaLongitudeSpan,
+  })
+  const pointFromCoordinates = (latitude: number, longitude: number): [number, number] => [
+    ((longitude - areaCenterLon) / areaLongitudeSpan + 0.5) * 320,
+    (0.5 - (latitude - areaCenterLat) / areaLatitudeSpan) * 180,
+  ]
+  const selectionRect = dragStart && dragCurrent
+    ? { x: Math.min(dragStart[0], dragCurrent[0]), y: Math.min(dragStart[1], dragCurrent[1]), width: Math.abs(dragCurrent[0] - dragStart[0]), height: Math.abs(dragCurrent[1] - dragStart[1]) }
+    : drawnBbox
+      ? (() => {
+          const first = pointFromCoordinates(drawnBbox.north, drawnBbox.west)
+          const second = pointFromCoordinates(drawnBbox.south, drawnBbox.east)
+          return { x: Math.min(first[0], second[0]), y: Math.min(first[1], second[1]), width: Math.abs(second[0] - first[0]), height: Math.abs(second[1] - first[1]) }
+        })()
+      : null
+  const handleAreaPointerDown = (event: ReactPointerEvent<SVGSVGElement>) => {
+    const point = areaPointFromEvent(event)
+    event.currentTarget.setPointerCapture(event.pointerId)
+    setDrawnBbox(null)
+    setDragStart(point)
+    setDragCurrent(point)
+  }
+  const handleAreaPointerMove = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (!dragStart) return
+    setDragCurrent(areaPointFromEvent(event))
+  }
+  const handleAreaPointerUp = (event: ReactPointerEvent<SVGSVGElement>) => {
+    if (!dragStart) return
+    const end = areaPointFromEvent(event)
+    const first = coordinatesFromPoint(dragStart)
+    const second = coordinatesFromPoint(end)
+    if (Math.abs(end[0] - dragStart[0]) < 3 || Math.abs(end[1] - dragStart[1]) < 3) {
+      setImportError('请在范围图上拖动出一个矩形区域')
+    } else {
+      setDrawnBbox({
+        south: Math.min(first.latitude, second.latitude),
+        west: Math.min(first.longitude, second.longitude),
+        north: Math.max(first.latitude, second.latitude),
+        east: Math.max(first.longitude, second.longitude),
+      })
+      setImportError(null)
+    }
+    setDragStart(null)
+    setDragCurrent(null)
+  }
+
   const fetchOsm = async () => {
     setFetchingOsm(true)
     setImportError(null)
     try {
-      const result = await onFetchOsm({
-        latitude: Number(osmLatitude),
-        longitude: Number(osmLongitude),
-        radius_km: Number(osmRadiusKm),
-      })
+      const result = osmFetchMode === 'draw'
+        ? drawnBbox
+          ? await onFetchOsmBbox(drawnBbox)
+          : (() => { throw new Error('请先在范围图上拖动出一个矩形区域') })()
+        : await onFetchOsm({
+            latitude: Number(osmLatitude),
+            longitude: Number(osmLongitude),
+            radius_km: Number(osmRadiusKm),
+          })
       applyImportedBuildings(result)
     } catch (error) {
       setImportError(error instanceof Error ? error.message : String(error))
@@ -308,13 +380,33 @@ export function SceneGeometryEditor({ config, baseline, materials, saving, selec
     </div>
     <div className="scene-online-import">
       <strong>在线获取 OSM 建筑</strong>
-      <p className="scene-import-help">通过 Overpass 获取中心点周围的建筑面，半径上限 5 km。</p>
-      <div className="online-import-grid">
-        <label className="field"><span>中心纬度</span><input type="number" step="0.00001" value={osmLatitude} onChange={(event) => setOsmLatitude(event.target.value)} disabled={saving || fetchingOsm} /></label>
-        <label className="field"><span>中心经度</span><input type="number" step="0.00001" value={osmLongitude} onChange={(event) => setOsmLongitude(event.target.value)} disabled={saving || fetchingOsm} /></label>
-        <label className="field"><span>半径 km</span><input type="number" min="0.1" max="5" step="0.1" value={osmRadiusKm} onChange={(event) => setOsmRadiusKm(event.target.value)} disabled={saving || fetchingOsm} /></label>
-      </div>
-      <button type="button" className="secondary-action full-width" disabled={saving || importing || fetchingOsm} onClick={() => void fetchOsm()}><Globe2 size={15} />{fetchingOsm ? '正在获取 OSM' : '在线获取并导入'}</button>
+      <label className="field"><span>获取方式</span><select value={osmFetchMode} onChange={(event) => setOsmFetchMode(event.target.value as 'radius' | 'draw')} disabled={saving || fetchingOsm}>
+        <option value="radius">中心点 + 半径</option>
+        <option value="draw">画矩形范围</option>
+      </select></label>
+      {osmFetchMode === 'radius' ? <>
+        <p className="scene-import-help">通过 Overpass 获取中心点周围的建筑面，半径上限 5 km。</p>
+        <div className="online-import-grid">
+          <label className="field"><span>中心纬度</span><input type="number" step="0.00001" value={osmLatitude} onChange={(event) => setOsmLatitude(event.target.value)} disabled={saving || fetchingOsm} /></label>
+          <label className="field"><span>中心经度</span><input type="number" step="0.00001" value={osmLongitude} onChange={(event) => setOsmLongitude(event.target.value)} disabled={saving || fetchingOsm} /></label>
+          <label className="field"><span>半径 km</span><input type="number" min="0.1" max="5" step="0.1" value={osmRadiusKm} onChange={(event) => setOsmRadiusKm(event.target.value)} disabled={saving || fetchingOsm} /></label>
+        </div>
+      </> : <>
+        <p className="scene-import-help">拖动下方范围图选择矩形区域，网格以当前中心点为中心，单边最多约 5 km。</p>
+        <svg ref={areaPickerRef} className="osm-area-picker" viewBox="0 0 320 180" role="img" aria-label="OSM 矩形范围选择器" onPointerDown={handleAreaPointerDown} onPointerMove={handleAreaPointerMove} onPointerUp={handleAreaPointerUp}>
+          <rect x="0" y="0" width="320" height="180" className="osm-area-background" />
+          {[0, 1, 2, 3, 4].map((step) => <line key={`v-${step}`} x1={step * 80} y1="0" x2={step * 80} y2="180" className="osm-area-grid-line" />)}
+          {[0, 1, 2, 3, 4].map((step) => <line key={`h-${step}`} x1="0" y1={step * 45} x2="320" y2={step * 45} className="osm-area-grid-line" />)}
+          <line x1="160" y1="0" x2="160" y2="180" className="osm-area-center-line" />
+          <line x1="0" y1="90" x2="320" y2="90" className="osm-area-center-line" />
+          {selectionRect && <rect x={selectionRect.x} y={selectionRect.y} width={selectionRect.width} height={selectionRect.height} className="osm-area-selection" />}
+          <text x="8" y="16" className="osm-area-label">北</text>
+          <text x="8" y="172" className="osm-area-label">南</text>
+          <text x="276" y="172" className="osm-area-label">东</text>
+        </svg>
+        {drawnBbox && <div className="osm-area-summary"><span>南 {drawnBbox.south.toFixed(5)} · 西 {drawnBbox.west.toFixed(5)}</span><span>北 {drawnBbox.north.toFixed(5)} · 东 {drawnBbox.east.toFixed(5)}</span><button type="button" className="compact-text-button" onClick={() => setDrawnBbox(null)} disabled={saving || fetchingOsm}>清除框选</button></div>}
+      </>}
+      <button type="button" className="secondary-action full-width" disabled={saving || importing || fetchingOsm} onClick={() => void fetchOsm()}><Globe2 size={15} />{fetchingOsm ? '正在获取 OSM' : osmFetchMode === 'draw' ? '获取框选范围并导入' : '在线获取并导入'}</button>
     </div>
     {importError && <div className="error-banner">{importError}</div>}
     {lastImport && <div className="scene-import-summary"><strong>{lastImport.original_filename} 已导入</strong><span>{lastImport.object_count} 个建筑 · {lastImport.source_type === 'custom' ? '自定义场景' : <>原点 {lastImport.origin.latitude.toFixed(5)}, {lastImport.origin.longitude.toFixed(5)}</>}</span>{lastImport.warnings.length > 0 && <span className="warning-text">{lastImport.warnings.length} 个对象被跳过</span>}</div>}

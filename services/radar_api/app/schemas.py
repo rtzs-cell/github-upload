@@ -134,6 +134,13 @@ class OsmFetchRequest(BaseModel):
     radius_km: float = Field(default=1.0, gt=0.0, le=5.0)
 
 
+class OsmBboxFetchRequest(BaseModel):
+    south: float = Field(ge=-90.0, le=90.0)
+    west: float = Field(ge=-180.0, le=180.0)
+    north: float = Field(ge=-90.0, le=90.0)
+    east: float = Field(ge=-180.0, le=180.0)
+
+
 class NameUpdateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
 

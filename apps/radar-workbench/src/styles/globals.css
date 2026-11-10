@@ -2318,6 +2318,15 @@ select {
 .scene-online-import > strong { color: #315d55; font-size: 12px; }
 .scene-online-import .field { margin: 0; }
 .online-import-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.osm-area-picker { width: 100%; height: 148px; border: 1px solid #bfd2d0; border-radius: 5px; background: #edf6f3; cursor: crosshair; touch-action: none; }
+.osm-area-background { fill: #edf6f3; }
+.osm-area-grid-line { stroke: #c8dcda; stroke-width: 0.8; }
+.osm-area-center-line { stroke: #5e8e84; stroke-width: 1; stroke-dasharray: 3 3; }
+.osm-area-selection { fill: rgba(35, 125, 105, 0.22); stroke: #176b5a; stroke-width: 1.5; }
+.osm-area-label { fill: #51716b; font-size: 10px; font-weight: 700; pointer-events: none; }
+.osm-area-summary { display: grid; grid-template-columns: 1fr 1fr auto; align-items: center; gap: 6px; color: #58716f; font-size: 10px; }
+.compact-text-button { border: 0; padding: 0; background: transparent; color: #247061; cursor: pointer; font-size: 10px; }
+.compact-text-button:disabled { color: #94a5a3; cursor: default; }
 .scene-editor { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .scene-editor-section,
 .building-editor { border: 1px solid #d8e0e3; border-radius: 6px; padding: 9px; background: #fbfcfc; min-width: 0; }

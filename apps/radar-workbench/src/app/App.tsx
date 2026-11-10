@@ -52,6 +52,7 @@ import {
   uploadExperimentModel,
   importExperimentScene,
   fetchExperimentOsm,
+  fetchExperimentOsmBbox,
 } from '../api/client'
 import type {
   CampaignSummary,
@@ -1356,6 +1357,7 @@ export function App() {
             onImportModel={(file) => uploadExperimentModel(selectedExperiment.manifest.experiment_id, file)}
             onImportScene={(file) => importExperimentScene(selectedExperiment.manifest.experiment_id, file)}
             onFetchOsm={(payload) => fetchExperimentOsm(selectedExperiment.manifest.experiment_id, payload)}
+            onFetchOsmBbox={(payload) => fetchExperimentOsmBbox(selectedExperiment.manifest.experiment_id, payload)}
           />
         )}
         {inspectorTab === 'paths' && (

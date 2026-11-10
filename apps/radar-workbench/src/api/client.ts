@@ -96,6 +96,17 @@ export async function fetchExperimentOsm(
   })
 }
 
+export async function fetchExperimentOsmBbox(
+  experimentId: string,
+  payload: { south: number; west: number; north: number; east: number },
+): Promise<SceneImportResult> {
+  const path = '/api/experiments/' + encodeURIComponent(experimentId) + '/scene-fetch/osm-bbox'
+  return requestJson<SceneImportResult>(path, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
 export async function importExperimentScene(experimentId: string, file: File): Promise<SceneImportResult> {
   const path = '/api/experiments/' + encodeURIComponent(experimentId) + '/scene-imports?filename=' + encodeURIComponent(file.name)
   const response = await fetch(apiUrl(path), {

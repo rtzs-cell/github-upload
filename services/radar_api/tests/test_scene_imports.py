@@ -36,6 +36,26 @@ def test_overpass_query_contains_building_bbox() -> None:
     assert 'out geom' in query
 
 
+def test_osm_bbox_endpoint_rejects_ranges_larger_than_five_km(tmp_path: Path, monkeypatch) -> None:
+    settings = Settings(
+        repo_root=REPO_ROOT,
+        existing_campaign_root=REPO_ROOT / "outputs" / "sionna_radar_campaigns" / "C002_full_radar_sensing",
+        workbench_output_root=tmp_path / "workbench",
+        web_cache_root=tmp_path / "cache",
+    )
+    monkeypatch.setattr(experiments_api, "get_settings", lambda: settings)
+    client = TestClient(app)
+    created = client.post("/api/experiments", json={"config": {"scene_preset": "empty", "name": "bbox validation"}})
+    assert created.status_code == 200, created.text
+    experiment_id = created.json()["manifest"]["experiment_id"]
+    response = client.post(
+        f"/api/experiments/{experiment_id}/scene-fetch/osm-bbox",
+        json={"south": 31.0, "west": 121.0, "north": 31.1, "east": 121.1},
+    )
+    assert response.status_code == 400, response.text
+    assert "5 km" in response.text
+
+
 def test_osm_import_projects_footprint_and_height() -> None:
     result = parse_scene_import("map.osm", _osm_payload())
     assert result["source_type"] == "osm"

@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from app.config import get_settings
-from app.core.scene_imports import fetch_osm_scene_import, store_scene_import
+from app.core.scene_imports import fetch_osm_scene_bbox_import, fetch_osm_scene_import, store_scene_import
 from app.core.two_building_scene import (
     create_experiment,
     default_two_building_config,
@@ -18,7 +18,7 @@ from app.core.two_building_scene import (
     store_experiment_model,
 )
 from app.core.history_management import delete_experiment
-from app.schemas import ExperimentCreateRequest, ExperimentListResponse, ExperimentResponse, ExperimentSummary, ExperimentUpdateRequest, NameUpdateRequest, OsmFetchRequest
+from app.schemas import ExperimentCreateRequest, ExperimentListResponse, ExperimentResponse, ExperimentSummary, ExperimentUpdateRequest, NameUpdateRequest, OsmBboxFetchRequest, OsmFetchRequest
 
 
 router = APIRouter(prefix="/api/experiments", tags=["experiments"])
@@ -114,6 +114,25 @@ def fetch_osm_scene(experiment_id: str, request: OsmFetchRequest) -> dict:
             request.latitude,
             request.longitude,
             request.radius_km,
+            settings.overpass_url,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"Unknown experiment_id: {experiment_id}") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.post("/{experiment_id}/scene-fetch/osm-bbox")
+def fetch_osm_scene_bbox(experiment_id: str, request: OsmBboxFetchRequest) -> dict:
+    settings = get_settings()
+    try:
+        return fetch_osm_scene_bbox_import(
+            settings.workbench_output_root,
+            experiment_id,
+            request.south,
+            request.west,
+            request.north,
+            request.east,
             settings.overpass_url,
         )
     except FileNotFoundError as exc:

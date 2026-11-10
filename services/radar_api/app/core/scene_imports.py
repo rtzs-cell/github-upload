@@ -281,6 +281,53 @@ def build_overpass_query(south: float, west: float, north: float, east: float) -
     return f'[out:json][timeout:30];(way["building"]({bbox});way["building:part"]({bbox}););out geom;'
 
 
+def _validate_osm_bbox(south: float, west: float, north: float, east: float) -> None:
+    if not -90 <= south < north <= 90 or not -180 <= west < east <= 180:
+        raise ValueError("Invalid OSM bounding box")
+    center_latitude = (south + north) / 2.0
+    height_km = (north - south) * 110.54
+    width_km = (east - west) * 111.32 * max(math.cos(math.radians(center_latitude)), 1e-6)
+    if max(width_km, height_km) > 5:
+        raise ValueError("OSM drawing range width and height must be at most 5 km")
+
+
+def _fetch_osm_scene_from_bbox(
+    root: Path,
+    experiment_id: str,
+    south: float,
+    west: float,
+    north: float,
+    east: float,
+    endpoint: str,
+    request_metadata: dict[str, Any],
+) -> dict[str, Any]:
+    _validate_osm_bbox(south, west, north, east)
+    query = build_overpass_query(south, west, north, east)
+    request = Request(
+        endpoint,
+        data=urlencode({"data": query}).encode("utf-8"),
+        headers={"User-Agent": "RadarSimulate/0.3 OSM scene import"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=45) as response:
+            data = response.read(50 * 1024 * 1024 + 1)
+    except HTTPError as exc:
+        raise ValueError(f"Overpass request failed with HTTP {exc.code}") from exc
+    except (URLError, TimeoutError) as exc:
+        raise ValueError(f"Overpass request failed: {exc}") from exc
+    if len(data) > 50 * 1024 * 1024:
+        raise ValueError("Overpass response exceeds the 50 MB limit")
+    result = store_scene_import(root, experiment_id, "overpass_osm.json", data)
+    result["original_filename"] = "Overpass OSM drawn area"
+    result["fetch_request"] = {
+        "bbox": [south, west, north, east],
+        "endpoint": endpoint,
+        **request_metadata,
+    }
+    return result
+
+
 def fetch_osm_scene_import(
     root: Path,
     experiment_id: str,
@@ -299,32 +346,37 @@ def fetch_osm_scene_import(
     north = min(90.0, latitude + latitude_delta)
     west = max(-180.0, longitude - longitude_delta)
     east = min(180.0, longitude + longitude_delta)
-    query = build_overpass_query(south, west, north, east)
-    request = Request(
+    return _fetch_osm_scene_from_bbox(
+        root,
+        experiment_id,
+        south,
+        west,
+        north,
+        east,
         endpoint,
-        data=urlencode({"data": query}).encode("utf-8"),
-        headers={"User-Agent": "RadarSimulate/0.3 OSM scene import"},
-        method="POST",
+        {"mode": "radius", "latitude": latitude, "longitude": longitude, "radius_km": radius_km},
     )
-    try:
-        with urlopen(request, timeout=45) as response:
-            data = response.read(50 * 1024 * 1024 + 1)
-    except HTTPError as exc:
-        raise ValueError(f"Overpass request failed with HTTP {exc.code}") from exc
-    except (URLError, TimeoutError) as exc:
-        raise ValueError(f"Overpass request failed: {exc}") from exc
-    if len(data) > 50 * 1024 * 1024:
-        raise ValueError("Overpass response exceeds the 50 MB limit")
-    result = store_scene_import(root, experiment_id, "overpass_osm.json", data)
-    result["original_filename"] = f"Overpass OSM {latitude:.5f},{longitude:.5f}"
-    result["fetch_request"] = {
-        "latitude": latitude,
-        "longitude": longitude,
-        "radius_km": radius_km,
-        "bbox": [south, west, north, east],
-        "endpoint": endpoint,
-    }
-    return result
+
+
+def fetch_osm_scene_bbox_import(
+    root: Path,
+    experiment_id: str,
+    south: float,
+    west: float,
+    north: float,
+    east: float,
+    endpoint: str,
+) -> dict[str, Any]:
+    return _fetch_osm_scene_from_bbox(
+        root,
+        experiment_id,
+        south,
+        west,
+        north,
+        east,
+        endpoint,
+        {"mode": "bbox"},
+    )
 
 
 def parse_scene_import(filename: str, data: bytes) -> dict[str, Any]:
