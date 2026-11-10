@@ -12,7 +12,8 @@ type Building = {
   size_m: [number, number, number]
   rotation_deg: [number, number, number]
   material: string
-  geometry_kind?: 'box' | 'model'
+  geometry_kind?: 'box' | 'model' | 'extruded_polygon'
+  footprint_m?: Array<[number, number]>
   model?: ImportedModelAsset & {
     source_bbox_min: [number, number, number]
     source_bbox_max: [number, number, number]
@@ -148,7 +149,8 @@ export function SceneGeometryEditor({ config, baseline, materials, saving, selec
         size_m: size,
         rotation_deg: vector(item.rotation_deg, [0, 0, 0]),
         material: String(item.material ?? 'concrete'),
-        geometry_kind: item.model ? 'model' : 'box',
+        geometry_kind: item.model ? 'model' : Array.isArray(item.footprint_m) ? 'extruded_polygon' : 'box',
+        footprint_m: Array.isArray(item.footprint_m) ? item.footprint_m : undefined,
       }
     })
   }
@@ -232,7 +234,8 @@ export function SceneGeometryEditor({ config, baseline, materials, saving, selec
           size_m: size,
           rotation_deg: rotation,
           material: String(item.material ?? 'concrete'),
-          geometry_kind: item.model ? 'model' : 'box',
+          geometry_kind: item.model ? 'model' : Array.isArray(item.footprint_m) ? 'extruded_polygon' : 'box',
+          footprint_m: Array.isArray(item.footprint_m) ? item.footprint_m : undefined,
         }
       })
       const result = {

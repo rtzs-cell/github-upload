@@ -158,8 +158,15 @@ export function experimentToSceneObjects(config: Record<string, any>): SceneObje
     const center = vector3(item.center_m, [0, 0, 0])
     const size = vector3(item.size_m, [1, 1, 1])
     const rotation = vector3(item.rotation_deg, [0, 0, 0])
-    const { min, max } = rotatedBoxBounds(center, size, rotation)
-    const surfaceArea = 2 * (size[0] * size[1] + size[0] * size[2] + size[1] * size[2])
+    const footprint = footprintForSize(item.footprint_m, size)
+    const { min, max } = footprint ? footprintBounds(center, size, rotation, footprint) : rotatedBoxBounds(center, size, rotation)
+    const perimeter = footprint
+      ? footprint.reduce((sum, point, index) => sum + Math.hypot(point[0] - footprint[(index + 1) % footprint.length][0], point[1] - footprint[(index + 1) % footprint.length][1]), 0)
+      : 2 * (size[0] + size[1])
+    const footprintArea = footprint
+      ? Math.abs(footprint.reduce((sum, point, index) => sum + point[0] * footprint[(index + 1) % footprint.length][1] - footprint[(index + 1) % footprint.length][0] * point[1], 0) / 2)
+      : size[0] * size[1]
+    const surfaceArea = 2 * footprintArea + perimeter * size[2]
     return {
       object_id: String(item.id ?? 'object'),
       display_name: String(item.name ?? item.id ?? 'object'),
@@ -168,12 +175,13 @@ export function experimentToSceneObjects(config: Record<string, any>): SceneObje
       bbox_max: max,
       bbox_center: center,
       surface_area: surfaceArea,
-      vertex_count: 8,
-      face_count: 12,
-      geometry_kind: item.model ? 'model' : 'box',
+      vertex_count: footprint ? footprint.length * 2 : 8,
+      face_count: footprint ? footprint.length * 2 + 2 * (footprint.length - 2) : 12,
+      geometry_kind: item.model ? 'model' : footprint ? 'extruded_polygon' : 'box',
       center_m: center,
       size_m: size,
       rotation_deg: rotation,
+      footprint_m: Array.isArray(item.footprint_m) ? item.footprint_m : undefined,
       model: item.model,
     }
   })
@@ -312,6 +320,61 @@ function rotatedBoxBounds(
   const half = size.map((value) => value / 2)
   const points: number[][] = []
   for (const x of [-half[0], half[0]]) for (const y of [-half[1], half[1]]) for (const z of [-half[2], half[2]]) {
+    const local = [x, y, z]
+    points.push(matrix.map((row, axis) => center[axis] + row.reduce((sum, value, index) => sum + value * local[index], 0)))
+  }
+  return {
+    min: [0, 1, 2].map((axis) => Math.min(...points.map((point) => point[axis]))) as [number, number, number],
+    max: [0, 1, 2].map((axis) => Math.max(...points.map((point) => point[axis]))) as [number, number, number],
+  }
+}
+
+export function footprintForSize(value: unknown, size: [number, number, number]): Array<[number, number]> | null {
+  if (!Array.isArray(value)) return null
+  const points: Array<[number, number]> = []
+  for (const point of value) {
+    if (!Array.isArray(point) || point.length < 2) continue
+    const candidate: [number, number] = [Number(point[0]), Number(point[1])]
+    if (!Number.isFinite(candidate[0]) || !Number.isFinite(candidate[1])) continue
+    if (!points.length || points[points.length - 1][0] !== candidate[0] || points[points.length - 1][1] !== candidate[1]) {
+      points.push(candidate)
+    }
+  }
+  if (points.length > 1 && points[0][0] === points[points.length - 1][0] && points[0][1] === points[points.length - 1][1]) points.pop()
+  if (points.length < 3) return null
+  const xs = points.map((point) => point[0])
+  const ys = points.map((point) => point[1])
+  const minX = Math.min(...xs)
+  const maxX = Math.max(...xs)
+  const minY = Math.min(...ys)
+  const maxY = Math.max(...ys)
+  const width = maxX - minX
+  const depth = maxY - minY
+  if (width <= 1e-8 || depth <= 1e-8) return null
+  const scaleX = size[0] / width
+  const scaleY = size[1] / depth
+  const centerX = (minX + maxX) / 2
+  const centerY = (minY + maxY) / 2
+  return points.map(([x, y]) => [(x - centerX) * scaleX, (y - centerY) * scaleY])
+}
+
+function footprintBounds(
+  center: [number, number, number],
+  size: [number, number, number],
+  rotationDeg: [number, number, number],
+  footprint: Array<[number, number]>,
+) {
+  const [rx, ry, rz] = rotationDeg.map((value) => value * Math.PI / 180)
+  const [cx, sx] = [Math.cos(rx), Math.sin(rx)]
+  const [cy, sy] = [Math.cos(ry), Math.sin(ry)]
+  const [cz, sz] = [Math.cos(rz), Math.sin(rz)]
+  const matrix = [
+    [cz * cy, cz * sy * sx - sz * cx, cz * sy * cx + sz * sx],
+    [sz * cy, sz * sy * sx + cz * cx, sz * sy * cx - cz * sx],
+    [-sy, cy * sx, cy * cx],
+  ]
+  const points: number[][] = []
+  for (const [x, y] of footprint) for (const z of [-size[2] / 2, size[2] / 2]) {
     const local = [x, y, z]
     points.push(matrix.map((row, axis) => center[axis] + row.reduce((sum, value, index) => sum + value * local[index], 0)))
   }

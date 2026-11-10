@@ -118,7 +118,7 @@ def _building_from_polygon(
         "size_m": [round(size_x, 3), round(size_y, 3), round(height, 3)],
         "rotation_deg": [0.0, 0.0, 0.0],
         "material": _material(tags),
-        "geometry_kind": "box",
+        "geometry_kind": "extruded_polygon",
         "footprint_m": footprint,
         "source": {
             "type": source_type,

@@ -91,10 +91,11 @@ export type SceneObject = {
   surface_area: number
   vertex_count: number
   face_count: number
-  geometry_kind?: 'box' | 'model'
+  geometry_kind?: 'box' | 'model' | 'extruded_polygon'
   center_m?: [number, number, number]
   size_m?: [number, number, number]
   rotation_deg?: [number, number, number]
+  footprint_m?: Array<[number, number]>
   model?: ImportedModelAsset & {
     source_bbox_min: [number, number, number]
     source_bbox_max: [number, number, number]

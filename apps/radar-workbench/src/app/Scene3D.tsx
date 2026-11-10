@@ -7,7 +7,7 @@ import * as THREE from 'three'
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js'
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader.js'
 import type { RadarDraftConfig, SceneObject, TopPath } from '../api/types'
-import { boresightAzimuthDeg } from './radarConfig'
+import { boresightAzimuthDeg, footprintForSize } from './radarConfig'
 
 const materialColors: Record<string, string> = {
   glass: '#7fc4d7',
@@ -151,6 +151,43 @@ function convertGeometry(geometry: THREE.BufferGeometry) {
   return converted
 }
 
+function ExtrudedFootprint({ object, selected }: { object: SceneObject; selected: boolean }) {
+  const simSize = object.size_m ?? [1, 1, 1]
+  const footprint = useMemo(() => footprintForSize(object.footprint_m, simSize), [object.footprint_m, simSize[0], simSize[1], simSize[2]])
+  const geometry = useMemo(() => {
+    if (!footprint) return null
+    const shape = new THREE.Shape()
+    shape.moveTo(footprint[0][0], footprint[0][1])
+    for (const [x, y] of footprint.slice(1)) shape.lineTo(x, y)
+    shape.closePath()
+    const extruded = new THREE.ExtrudeGeometry(shape, {
+      bevelEnabled: false,
+      curveSegments: 1,
+      depth: simSize[2],
+      steps: 1,
+    })
+    extruded.translate(0, 0, -simSize[2] / 2)
+    extruded.applyMatrix4(coordinateSwap)
+    extruded.computeVertexNormals()
+    return extruded
+  }, [footprint, simSize[2]])
+  const edges = useMemo(() => geometry ? new THREE.EdgesGeometry(geometry, 15) : null, [geometry])
+  if (!geometry) return <mesh><boxGeometry args={[simSize[0], simSize[2], simSize[1]]} /><meshStandardMaterial color={materialColors[object.material] ?? '#b8c0c2'} /></mesh>
+  return <>
+    <mesh geometry={geometry}>
+      <meshStandardMaterial
+        color={materialColors[object.material] ?? '#b8c0c2'}
+        emissive={selected ? '#176b5a' : '#000000'}
+        emissiveIntensity={selected ? 0.32 : 0}
+        transparent
+        opacity={selected ? 0.86 : 0.68}
+        side={THREE.DoubleSide}
+      />
+    </mesh>
+    {selected && edges && <lineSegments geometry={edges}><lineBasicMaterial color="#087a68" depthTest={false} /></lineSegments>}
+  </>
+}
+
 function PlyModel({ object }: { object: SceneObject }) {
   const source = useLoader(PLYLoader, object.model!.preview_url)
   const geometry = useMemo(() => convertGeometry(source), [source])
@@ -182,8 +219,9 @@ function ObjModel({ object }: { object: SceneObject }) {
 
 function BuildingMesh({ object, selected, onSelect }: { object: SceneObject; selected: boolean; onSelect: () => void }) {
   const { size } = objectTransform(object)
+  const isExtrudedFootprint = object.geometry_kind === 'extruded_polygon' && Array.isArray(object.footprint_m)
   return <group onClick={(event) => { event.stopPropagation(); onSelect() }}>
-    {object.geometry_kind === 'model' && object.model ? <Suspense fallback={<mesh><boxGeometry args={size} /><meshStandardMaterial color="#839699" wireframe /></mesh>}>
+    {isExtrudedFootprint ? <ExtrudedFootprint object={object} selected={selected} /> : object.geometry_kind === 'model' && object.model ? <Suspense fallback={<mesh><boxGeometry args={size} /><meshStandardMaterial color="#839699" wireframe /></mesh>}>
       {object.model.format === 'obj' ? <ObjModel object={object} /> : <PlyModel object={object} />}
     </Suspense> : <mesh>
       <boxGeometry args={size} />
@@ -195,7 +233,7 @@ function BuildingMesh({ object, selected, onSelect }: { object: SceneObject; sel
         opacity={selected ? 0.82 : 0.62}
       />
     </mesh>}
-    {selected && <mesh>
+    {selected && !isExtrudedFootprint && <mesh>
       <boxGeometry args={size.map((value) => value + 0.35) as [number, number, number]} />
       <meshBasicMaterial color="#087a68" wireframe depthTest={false} />
     </mesh>}

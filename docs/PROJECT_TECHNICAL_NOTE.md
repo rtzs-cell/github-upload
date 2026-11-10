@@ -68,7 +68,7 @@ y = (phi-phi_0) M_{phi}
 
 Overpass JSON 支持 `elements` 中的节点、way 和 way geometry。GeoJSON 支持 FeatureCollection、Feature、Polygon 和 MultiPolygon。GeoJSON 的坐标按 WGS84 经纬度处理。
 
-当前仿真场景以参数化建筑盒体表达导入对象。复杂曲线和带洞多边形使用外包围盒参与传播计算，原始外轮廓仍保留在对象元数据中。这一选择保证了导入对象可以继续使用现有的移动、缩放、旋转和场景 XML 生成链路。
+当前仿真场景将闭合建筑面按 `footprint_m` 垂直挤出为多边形 PLY 网格，网格包含底面、顶面和侧面三角形。对象仍可继续使用现有的移动、缩放、旋转和场景 XML 生成链路。OSM 关系型 multipolygon 的洞口暂不单独挤出。
 
 ## 4. API
 
@@ -118,7 +118,7 @@ Content-Type: application/octet-stream
 
 ## 7. 当前边界
 
-当前版本面向建筑传播场景，重点覆盖闭合 building way、Overpass building way 和 GeoJSON 建筑面。OSM 关系型 multipolygon、道路表面、植被和地形尚未转化为独立的传播几何。复杂建筑仍按外包围盒参与仿真，因此需要精确外形时应使用 OBJ/PLY 模型。
+当前版本面向建筑传播场景，重点覆盖闭合 building way、Overpass building way 和 GeoJSON 建筑面，并将这些闭合外轮廓挤出为传播网格。OSM 关系型 multipolygon 的洞口、道路表面、植被和地形尚未转化为独立的传播几何。
 
 导入坐标使用局部投影，适合单个街区或中小范围场景。大范围城市数据需要进一步加入分区、投影带和场景分块策略。
 
@@ -129,7 +129,7 @@ Content-Type: application/octet-stream
 - 将 OSM multipolygon 关系转换为带洞的挤出网格。
 - 将道路、地面材质和建筑材质映射到更细的 Sionna RT 材料集合。
 - 对大范围地图采用分块加载和视野裁剪。
-- 在独立场景数据上比较盒体近似和真实网格对传播路径、MPC 与 FMCW 结果的影响。
+- 在独立场景数据上比较多边形挤出网格与带洞 multipolygon 网格对传播路径、MPC 与 FMCW 结果的影响。
 - 为导入场景建立统一的坐标、单位和数据版本记录。
 
 本文档描述的是当前实现和已验证的工程能力，不把尚未完成的精确网格传播和大范围地图评测作为已完成结果。

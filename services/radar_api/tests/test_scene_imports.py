@@ -7,6 +7,7 @@ from app.api import experiments as experiments_api
 from app.config import Settings
 from app.main import app
 from app.core.scene_imports import build_overpass_query, parse_scene_import
+from app.core.two_building_scene import write_extruded_polygon_ply
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -45,6 +46,24 @@ def test_osm_import_projects_footprint_and_height() -> None:
     assert 18.0 < building["size_m"][0] < 20.0
     assert 21.0 < building["size_m"][1] < 23.0
     assert len(building["footprint_m"]) == 4
+    assert building["geometry_kind"] == "extruded_polygon"
+
+
+def test_extruded_polygon_ply_preserves_concave_footprint(tmp_path: Path) -> None:
+    footprint = [(-2.0, -2.0), (2.0, -2.0), (2.0, -1.0), (0.0, -1.0), (0.0, 2.0), (-2.0, 2.0)]
+    mesh_path = tmp_path / "concave.ply"
+    write_extruded_polygon_ply(mesh_path, footprint, [10.0, 20.0, 3.0], [4.0, 4.0, 6.0])
+    lines = mesh_path.read_text(encoding="ascii").splitlines()
+    vertex_count = int(next(line.split()[-1] for line in lines if line.startswith("element vertex")))
+    face_count = int(next(line.split()[-1] for line in lines if line.startswith("element face")))
+    header_end = lines.index("end_header")
+    vertices = [tuple(map(float, line.split())) for line in lines[header_end + 1:header_end + 1 + vertex_count]]
+    faces = [line.split() for line in lines[header_end + 1 + vertex_count:header_end + 1 + vertex_count + face_count]]
+    assert vertex_count == 12
+    assert face_count == 20
+    assert all(face[0] == "3" and all(0 <= int(index) < vertex_count for index in face[1:]) for face in faces)
+    assert len({(round(vertex[0], 6), round(vertex[1], 6)) for vertex in vertices[:6]}) == 6
+    assert {round(vertex[2], 6) for vertex in vertices} == {0.0, 6.0}
 
 
 def test_geojson_import_reads_building_properties() -> None:
@@ -98,4 +117,5 @@ def test_osm_import_endpoint_supports_hybrid_scene(tmp_path: Path, monkeypatch) 
     assert saved.status_code == 200, saved.text
     saved_config = saved.json()["config"]
     assert saved_config["scene"]["buildings"][0]["source"]["type"] == "osm"
+    assert saved_config["scene"]["buildings"][0]["geometry_kind"] == "extruded_polygon"
     assert Path(saved_config["scene"]["scene_xml_path"]).exists()

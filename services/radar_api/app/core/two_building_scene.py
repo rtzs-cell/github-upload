@@ -277,6 +277,159 @@ def write_box_ply(path: Path, center_m: list[float], size_m: list[float], rotati
             f.write(f"3 {face[0]} {face[1]} {face[2]}\n")
 
 
+def normalize_footprint_points(footprint_m: Any, size_m: list[float]) -> list[tuple[float, float]]:
+    if not isinstance(footprint_m, list):
+        raise ValueError("Extruded footprint must be a list of points")
+    points: list[tuple[float, float]] = []
+    for point in footprint_m:
+        if not isinstance(point, (list, tuple)) or len(point) < 2:
+            continue
+        x, y = float(point[0]), float(point[1])
+        if not math.isfinite(x) or not math.isfinite(y):
+            continue
+        candidate = (x, y)
+        if not points or candidate != points[-1]:
+            points.append(candidate)
+    if len(points) > 1 and points[0] == points[-1]:
+        points.pop()
+    if len(points) < 3:
+        raise ValueError("Extruded footprint requires at least three points")
+    changed = True
+    while changed and len(points) >= 3:
+        changed = False
+        filtered: list[tuple[float, float]] = []
+        for index, point in enumerate(points):
+            previous = points[index - 1]
+            following = points[(index + 1) % len(points)]
+            if abs(_polygon_cross(previous, point, following)) <= 1e-9:
+                changed = True
+                continue
+            filtered.append(point)
+        if len(filtered) >= 3:
+            points = filtered
+    if len(points) < 3:
+        raise ValueError("Extruded footprint is collinear")
+    min_x = min(point[0] for point in points)
+    max_x = max(point[0] for point in points)
+    min_y = min(point[1] for point in points)
+    max_y = max(point[1] for point in points)
+    width = max_x - min_x
+    depth = max_y - min_y
+    if width <= 1e-8 or depth <= 1e-8:
+        raise ValueError("Extruded footprint has zero planar extent")
+    center_x = (min_x + max_x) / 2.0
+    center_y = (min_y + max_y) / 2.0
+    scale_x = float(size_m[0]) / width
+    scale_y = float(size_m[1]) / depth
+    return [
+        ((x - center_x) * scale_x, (y - center_y) * scale_y)
+        for x, y in points
+    ]
+
+
+def _polygon_cross(a: tuple[float, float], b: tuple[float, float], c: tuple[float, float]) -> float:
+    return (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+
+
+def _polygon_area(points: list[tuple[float, float]]) -> float:
+    return sum(
+        points[index][0] * points[(index + 1) % len(points)][1]
+        - points[(index + 1) % len(points)][0] * points[index][1]
+        for index in range(len(points))
+    ) / 2.0
+
+
+def _point_in_triangle(
+    point: tuple[float, float],
+    a: tuple[float, float],
+    b: tuple[float, float],
+    c: tuple[float, float],
+) -> bool:
+    crosses = (
+        _polygon_cross(a, b, point),
+        _polygon_cross(b, c, point),
+        _polygon_cross(c, a, point),
+    )
+    epsilon = 1e-9
+    return min(crosses) >= -epsilon
+
+
+def triangulate_polygon(points: list[tuple[float, float]]) -> list[tuple[int, int, int]]:
+    if len(points) < 3 or abs(_polygon_area(points)) <= 1e-8:
+        raise ValueError("Footprint polygon is degenerate")
+    indices = list(range(len(points)))
+    if _polygon_area(points) < 0:
+        indices.reverse()
+    triangles: list[tuple[int, int, int]] = []
+    guard = 0
+    while len(indices) > 3:
+        ear_found = False
+        for position in range(len(indices)):
+            previous = indices[position - 1]
+            current = indices[position]
+            following = indices[(position + 1) % len(indices)]
+            if _polygon_cross(points[previous], points[current], points[following]) <= 1e-9:
+                continue
+            if any(
+                index not in {previous, current, following}
+                and _point_in_triangle(points[index], points[previous], points[current], points[following])
+                for index in indices
+            ):
+                continue
+            triangles.append((previous, current, following))
+            del indices[position]
+            ear_found = True
+            break
+        guard += 1
+        if not ear_found or guard > len(points) * len(points):
+            raise ValueError("Footprint polygon is self-intersecting or cannot be triangulated")
+    triangles.append((indices[0], indices[1], indices[2]))
+    return triangles
+
+
+def write_extruded_polygon_ply(
+    path: Path,
+    footprint_m: Any,
+    center_m: list[float],
+    size_m: list[float],
+    rotation_deg: list[float] | None = None,
+) -> None:
+    points = normalize_footprint_points(footprint_m, size_m)
+    triangles = triangulate_polygon(points)
+    height = float(size_m[2])
+    local_vertices = [(x, y, -height / 2.0) for x, y in points]
+    local_vertices += [(x, y, height / 2.0) for x, y in points]
+    matrix = rotation_matrix(rotation_deg)
+    vertices = [
+        tuple(center_m[index] + transformed[index] for index in range(3))
+        for transformed in (transform_point(matrix, point) for point in local_vertices)
+    ]
+    point_count = len(points)
+    faces = [(b + point_count, a + point_count, c + point_count) for a, b, c in triangles]
+    faces += [(a, c, b) for a, b, c in triangles]
+    for index in range(point_count):
+        following = (index + 1) % point_count
+        faces.extend([
+            (index, following, following + point_count),
+            (index, following + point_count, index + point_count),
+        ])
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="ascii") as file:
+        file.write("ply\n")
+        file.write("format ascii 1.0\n")
+        file.write(f"element vertex {len(vertices)}\n")
+        file.write("property float x\n")
+        file.write("property float y\n")
+        file.write("property float z\n")
+        file.write(f"element face {len(faces)}\n")
+        file.write("property list uchar int vertex_indices\n")
+        file.write("end_header\n")
+        for x, y, z in vertices:
+            file.write(f"{x:.9f} {y:.9f} {z:.9f}\n")
+        for face in faces:
+            file.write(f"3 {face[0]} {face[1]} {face[2]}\n")
+
+
 def scene_shapes(config: dict[str, Any]) -> list[dict[str, Any]]:
     shapes = []
     ground = config["scene"].get("ground")
@@ -378,6 +531,15 @@ def write_scene_assets(exp_root: Path, config: dict[str, Any], revision: str | N
                 "mesh_filename": mesh_path.name,
                 "to_world_matrix": model_transform_matrix(shape),
             })
+        elif shape.get("footprint_m"):
+            mesh_path = mesh_dir / f"{object_id}.ply"
+            write_extruded_polygon_ply(
+                mesh_path,
+                shape["footprint_m"],
+                shape["center_m"],
+                shape["size_m"],
+                shape.get("rotation_deg"),
+            )
         else:
             mesh_path = mesh_dir / f"{object_id}.ply"
             write_box_ply(mesh_path, shape["center_m"], shape["size_m"], shape.get("rotation_deg"))
@@ -466,7 +628,13 @@ def enrich_experiment_config(config: dict[str, Any]) -> dict[str, Any]:
         if len(rotation) != 3 or not all(math.isfinite(float(value)) for value in rotation):
             raise ValueError("Each building requires three finite rotation values")
         building["rotation_deg"] = [float(value) for value in rotation]
-        building["geometry_kind"] = "model" if building.get("model") else "box"
+        building["geometry_kind"] = (
+            "model"
+            if building.get("model")
+            else "extruded_polygon"
+            if building.get("footprint_m")
+            else "box"
+        )
         if building["geometry_kind"] == "model":
             model = building.get("model")
             if not isinstance(model, dict) or not model.get("source_path"):
