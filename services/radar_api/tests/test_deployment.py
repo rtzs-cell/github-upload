@@ -48,6 +48,11 @@ def test_registry_works_without_optional_example_data(tmp_path: Path) -> None:
             }
         ]
     ).to_csv(reports_root / "runs_index.csv", index=False)
+    run_dir = campaign_root / "runs" / "measurement_001"
+    for required_file in CampaignRegistry.REQUIRED_RUN_FILES:
+        path = run_dir / required_file
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
 
     settings = Settings(
         repo_root=tmp_path,
